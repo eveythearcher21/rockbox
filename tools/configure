@@ -4452,7 +4452,6 @@ fi
       toolset='';
       GCCOPTS='';
       LDOPTS='';
-      rbdir='.'
       extradefines="$extradefines  -DDEBUG"
       appsdir='$(ROOTDIR)/tools/checkwps';
       output='checkwps.'${modelname};
