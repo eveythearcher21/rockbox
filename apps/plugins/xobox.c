@@ -381,6 +381,15 @@ CONFIG_KEYPAD == MROBE500_PAD
 #define DOWN  BUTTON_DOWN
 #define PAUSE BUTTON_START
 
+#elif CONFIG_KEYPAD == PSP_PAD
+
+#define QUIT  BUTTON_BACK
+#define LEFT  BUTTON_LEFT
+#define RIGHT BUTTON_RIGHT
+#define UP    BUTTON_UP
+#define DOWN  BUTTON_DOWN
+#define PAUSE BUTTON_SELECT
+
 #else
 #error "No keymap defined!"
 #endif
@@ -614,12 +623,6 @@ static inline int get_newy (int y, int len, int deg)
         return y + len * 2;
     else /* (deg & DIR_UU) */
         return y - len * 2;
-}
-
-/* make random function get it's value from the device ticker */
-static inline void randomize (void)
-{
-    rb->srand (*rb->current_tick);
 }
 
 /* get a random number between 0 and range-1 */
@@ -1333,9 +1336,7 @@ enum plugin_status plugin_start (const void *parameter)
         rb->splash(HZ, "Failed to load saved game");
     }
 
-    randomize ();
     ret = xobox_loop ();
-
 
     /* Turn on backlight timeout (revert to settings) */
     backlight_use_settings();

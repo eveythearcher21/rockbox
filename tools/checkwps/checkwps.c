@@ -227,6 +227,7 @@ bool radio_hardware_present(void)
 #endif
 
 #include "fontbundle.h"
+#include "themeassets.h"
 
 static int loaded_fonts = 0;
 static struct font _font;
@@ -277,29 +278,57 @@ static int checkwps_loader(const char *path, const char *search, int mode)
             int missing = 1;
             if (final) *final = 0;
 
-            /* Check if font is included in the bundle */
-            for (int i = 0 ; bundledfonts[i] != NULL ; i++)
+            /* Check if font is a default theme asset */
+            for (int i = 0 ; themeassets[i] != NULL; i++)
             {
-                if (first && !strcmp(first+1, bundledfonts[i]))
+                if (first && !strcmp(first+1, themeassets[i]))
                 {
                     missing = 0;
                     break;
                 }
             }
 
+            /* Check if font is included in the bundle */
             if (missing)
+            {
+                for (int i = 0 ; bundledfonts[i] != NULL ; i++)
+                {
+                     if (first && !strcmp(first+1, bundledfonts[i]))
+                     {
+                         missing = 2;
+                         break;
+                     }
+                 }
+            }
+
+            if (missing == 1)
             {
                 printf("Font missing >%s<\n", first+1);
                 return -4;
-            } else {
+            } else if (missing == 2) {
                 printf("INFO: Theme requires rockbox font bundle\n");
             }
         }
-
-        if (mode == 2)
+        else if (mode == 2) /* Not found and it's an asset */
         {
-            printf("ERROR: File missing: %s\n", path);
-            return -5;
+             char *first = strrchr(buf, '/');
+             char *final = strrchr(buf, '.');
+             int missing = 1;
+             if (final) *final = 0;
+
+             for (int i = 0 ; themeassets[i] != NULL; i++)
+             {
+                 if (first && !strcmp(first+1, themeassets[i]))
+                 {
+                     missing = 0;
+                     break;
+                 }
+             }
+             if (missing)
+             {
+                 printf("ERROR: File missing: %s\n", path);
+                 return -5;
+             }
         }
     }
 
@@ -381,6 +410,11 @@ bool settings_load_config(const char* file, bool apply)
             if (checkwps_loader(value, SBS_DIR, 2))
                 return false;
         }
+        else if (!strcmp(name, "wrs"))
+        {
+            if (checkwps_loader(value, WPS_DIR, 2))
+                return false;
+        }
         else if (!strcmp(name, "rwps"))
         {
             if (checkwps_loader(value, WPS_DIR, 2))
@@ -394,6 +428,11 @@ bool settings_load_config(const char* file, bool apply)
         else if (!strcmp(name, "rfms"))
         {
             if (checkwps_loader(value, SBS_DIR, 2))
+                return false;
+        }
+        else if (!strcmp(name, "rwrs"))
+        {
+            if (checkwps_loader(value, WPS_DIR, 2))
                 return false;
         }
         else if (!strcmp(name, "iconset"))
@@ -423,7 +462,8 @@ bool settings_load_config(const char* file, bool apply)
 
         if (!string_to_cfg(name, value, &theme_changed))
         {
-            if (strcmp(name, "fms") && strcmp(name, "rfms")) {
+            if (strcmp(name, "fms") && strcmp(name, "rfms") &&
+                strcmp(name, "wrs") && strcmp(name, "rwrs")) {
                 /* Unknown settings are ignored by firmware */
                 printf("WARNING: Invalid setting: %s = %s\n", name, value);
                 continue;
@@ -462,6 +502,15 @@ int check_filetype(const char *ext, enum skinnable_screens *skin,
         return 1;
 #endif
     }
+    else if (!strcmp(ext, "wrs"))
+    {
+#ifdef HAVE_RECORDING
+        *skin = RECORDING_SCREEN;
+        *screen = SCREEN_MAIN;
+#else
+        return 1;
+#endif
+    }
     else if (!strcmp(ext, "rsbs"))
     {
 #ifdef HAVE_REMOTE_LCD
@@ -484,6 +533,15 @@ int check_filetype(const char *ext, enum skinnable_screens *skin,
     {
 #if defined(HAVE_REMOTE_LCD) && CONFIG_TUNER
         *skin = FM_SCREEN;
+        *screen = SCREEN_REMOTE;
+#else
+        return 1;
+#endif
+    }
+    else if (!strcmp(ext, "rwrs"))
+    {
+#if defined(HAVE_REMOTE_LCD) && defined(HAVE_RECORDING)
+        *skin = RECORDING_SCREEN;
         *screen = SCREEN_REMOTE;
 #else
         return 1;
@@ -516,7 +574,8 @@ int main(int argc, char **argv)
         strcmp(argv[1],"--help") == 0 )
     {
         printf("Usage: checkwps [OPTIONS] [filename1] [filename2] ...\n");
-        printf("  supported file types: wps, sbs, fms, cfg, rwps, rsbs, rfms\n");
+        printf("  supported file types: wps, sbs, fms, wrs, cfg, "
+               "rwps, rsbs, rfms, rwrs\n");
         printf("\nOPTIONS:\n");
         printf("\t-v\t\tverbose\n");
         printf("\t-vv\t\tmore verbose\n");

@@ -160,7 +160,9 @@ static const char default_game[9][9] =
 #define MARK_SIZE   6   /* Mark width and height */
 
 #elif (LCD_HEIGHT==360) && (LCD_WIDTH==480)
-/* Y1 - 360x480, 9 cells @ 48x48 with 14 border lines */
+/* Innioasis Y1 - 360x480, 9 cells @ 48x48 with 14 border lines */
+#elif (LCD_HEIGHT==272) && (LCD_WIDTH==480)
+/* Sony PSP - 480x472, 9 cells @ 24x24 with 14 border lines */
 #define MARK_OFFS   1   /* Pixels between border and mark */
 #define MARK_SPACE  2   /* Pixels between two marks */
 #define MARK_SIZE   6   /* Mark width and height */
