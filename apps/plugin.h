@@ -307,6 +307,8 @@ struct plugin_api {
     int (*font_load)(const char *path);
     void (*font_unload)(int font_id);
     struct font* (*font_get)(int font);
+    int (*font_measurestring)(const unsigned char *str, size_t maxbytes,
+                              size_t maxwidth, int *w, int *h, int fontnum);
     int  (*font_getstringsize)(const unsigned char *str, int *w, int *h,
                                int fontnumber);
     int (*font_get_width)(struct font* pf, ucschar_t char_code);
@@ -1052,8 +1054,6 @@ struct plugin_api {
 
     /* new stuff at the end, sort into place next time
        the API gets incompatible */
-    int (*font_measurestring)(const unsigned char *str, size_t maxbytes,
-                              size_t maxwidth, int *w, int *h, int fontnum);
 #ifdef INNIOASIS_Y1
     bool (*upload_scrobble)(const char *artist, const char *track, const char *album, int timestamp, long length);
     char** (*android_podcast_get_episode_list)(int podcast_num);

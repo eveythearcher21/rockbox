@@ -904,7 +904,6 @@ static const struct plugin_api rockbox_api = {
 
     /* new stuff at the end, sort into place next time
        the API gets incompatible */
-    font_measurestring,
 #ifdef INNIOASIS_Y1
     .upload_scrobble = upload_scrobble,
     .android_podcast_get_podcast_names = android_podcast_get_podcast_names,
