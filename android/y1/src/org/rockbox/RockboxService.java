@@ -81,6 +81,23 @@ import java.util.HashMap;
 
 public class RockboxService extends Service
 {
+    /* Called on the core thread; Context.startActivity uses Android's activity
+     * manager and does not manipulate UI views on that thread. */
+    public boolean openVideo(byte[] encodedPath)
+    {
+        try {
+            File file = VideoFiles.resolve(new File("/sdcard/Videos"),
+                                           new String(encodedPath, "UTF-8"));
+            Intent intent = new Intent(this, RockboxVideoActivity.class);
+            intent.putExtra("video_path", file.getPath());
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            return true;
+        } catch (Exception error) {
+            Logger.e("Could not launch internal video player: " + error.toString());
+            return false;
+        }
+    }
     /* this Service is really a singleton class - well almost. */
     private static RockboxService instance = null;
 

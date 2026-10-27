@@ -26,6 +26,10 @@
 			</intent-filter>
 		</activity>		
 
+        <activity android:name=".RockboxVideoActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
 		<service android:name=".RockboxService">
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN" />

@@ -1,0 +1,30 @@
+# SNARTY Y1, adapted from SNARTY 1.0 by Simon Andén / Tirim4 (2025).
+# Original credits: SPAZZ (Chuck Lardo), SNAZZ/SNAZZ2 (Jihoon Kim),
+# SNAZZY (Phil Graves), adwaitapod (even Dook). CC-BY-SA 4.0.
+%wd
+%Fl(2,15-KodeMono-SemiBold.fnt)
+%Fl(3,22-KodeMono-SemiBold.fnt)
+%Fl(4,29-KodeMono-SemiBold.fnt)
+%V(20,12,440,30,3)
+%alVOL %pv%ac%?ps<SHF|>%ar%bl%%
+%V(20,50,440,1,-)
+%dr(0,0,440,1)
+# Cover art uses the native colour renderer; the fallback appears only if absent.
+%?C<%Vd(cover)|%Vd(no_cover)>
+%Vl(cover,20,70,200,200,-)
+%Cl(0,0,200,200,c,c)
+%Cd
+%Vl(no_cover,20,70,200,200,3)
+%acNO COVER
+%V(240,70,220,60,4)
+%s%?it<%it|%fn>
+%V(240,140,220,35,3)
+%s%?ia<%ia|Unknown Artist>
+%V(240,185,220,60,3)
+%s%?id<%id|Unknown Album>
+%V(240,250,220,25,2)
+%fc | %fb kbps | %fk kHz
+%V(20,292,440,8,-)
+%pb(0,0,440,8)
+%V(20,310,440,30,3)
+%al%pc / %pt%ar%pp / %pe

@@ -23,6 +23,7 @@ package org.rockbox.Helper;
 
 import org.rockbox.RockboxFramebuffer;
 import org.rockbox.RockboxService;
+import org.rockbox.RockboxVideoActivity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -148,6 +149,12 @@ public class MediaButtonReceiver
         @Override
         public void onReceive(Context context, Intent intent)
         {
+            if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction()) &&
+                RockboxVideoActivity.handleMediaButton(
+                    (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT))) {
+                if (isOrderedBroadcast()) abortBroadcast();
+                return;
+            }
             int dpad_mode = prefs.getInt("dpad_mode", 0);
             if (dpad_mode > 0){
                 if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
@@ -261,7 +268,8 @@ public class MediaButtonReceiver
                                          ": "+ focusChange);
             if (running)
             {   /* Play nice and stop for the the other app */
-                if (focusChange == AudioManager.AUDIOFOCUS_LOSS)
+                if (focusChange == AudioManager.AUDIOFOCUS_LOSS &&
+                    !RockboxVideoActivity.isActive())
                     RockboxFramebuffer.buttonHandler(KeyEvent.KEYCODE_MEDIA_STOP, false);
             }
         }

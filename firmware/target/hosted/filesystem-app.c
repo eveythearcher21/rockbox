@@ -131,6 +131,12 @@ void paths_init(void)
     os_mkdir("/sdcard/.rockbox" __MKDIR_MODE_ARG);
     os_mkdir("/sdcard/.rockbox/rocks.data" __MKDIR_MODE_ARG);
     os_mkdir("/sdcard/.rockbox/eqs" __MKDIR_MODE_ARG);
+    os_mkdir("/sdcard/Podcasts" __MKDIR_MODE_ARG);
+    os_mkdir("/sdcard/Videos" __MKDIR_MODE_ARG);
+    /* Retire the diagnostic files installed by SNARTY-Y1-2. */
+    os_remove("/sdcard/.rockbox/carlink-diagnostics.sh");
+    os_remove("/sdcard/.rockbox/carlink-diagnostics.txt");
+    os_remove("/sdcard/.rockbox/carlink-diagnostics.txt.tmp");
 #else
     char config_dir[MAX_PATH];
 

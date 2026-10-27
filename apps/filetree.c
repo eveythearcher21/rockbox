@@ -44,6 +44,10 @@
 #include "misc.h"
 #include "strnatcmp.h"
 #include "keyboard.h"
+#ifdef INNIOASIS_Y1
+#include "video-android.h"
+#include "audio.h"
+#endif
 
 #ifdef HAVE_MULTIVOLUME
 #include "mv.h"
@@ -591,6 +595,27 @@ int ft_enter(struct tree_context* c)
         c->selected_item=0;
     }
     else {
+#ifdef INNIOASIS_Y1
+        /* MP4 is also an audio extension. Route files in Videos before the
+         * audio branch so they never replace the music queue with audio only. */
+        const char *extension = strrchr(buf, '.');
+        if (!strncmp(buf, "/sdcard/Videos/", sizeof("/sdcard/Videos/") - 1) &&
+            extension && !strcasecmp(extension, ".mp4"))
+        {
+            int status = audio_status();
+            bool was_playing = (status & AUDIO_STATUS_PLAY) &&
+                               !(status & AUDIO_STATUS_PAUSE);
+            if (was_playing)
+                audio_pause();
+            if (!android_play_video(buf))
+            {
+                if (was_playing)
+                    audio_resume();
+                splash(HZ * 2, "Could not open video player");
+            }
+            return rc;
+        }
+#endif
         bool play = false;
         int start_index=0;
 
