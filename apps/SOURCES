@@ -62,6 +62,8 @@ cuesheet.c
 talk.c
 tree.c
 #ifdef HAVE_TAGCACHE
+listening_stats.c
+listening_history.c
 tagtree.c
 #endif
 filetree.c

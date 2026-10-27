@@ -537,6 +537,16 @@ static int android_update_func(void)
     return 0;
 }
 
+static int car_connection_check(void)
+{
+    splash(0, "Checking USB capabilities...");
+    int result = system("su -c 'sh /sdcard/.rockbox/carlink-diagnostics.sh'");
+    splash(HZ * 3, result == 0
+           ? "Saved .rockbox/carlink-diagnostics.txt"
+           : "Could not save report; check storage/root access");
+    return 0;
+}
+
 static int system_menu_func(void)
 {
     system("am start -a android.settings.SETTINGS");
@@ -554,6 +564,8 @@ MENUITEM_FUNCTION(android_restart_item, 0, ID2P(LANG_RESTART_ROCKBOX),
                   android_restart_func, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(android_update_item, 0, ID2P(LANG_UPDATE_ROCKBOX),
                   android_update_func, NULL, Icon_NOICON);
+MENUITEM_FUNCTION(car_connection_item, 0, "Car connection check",
+                  car_connection_check, NULL, Icon_System_menu);
 MENUITEM_FUNCTION(system_menu_item, 0, ID2P(LANG_SYSTEM_SETTINGS),
                   system_menu_func, NULL, Icon_NOICON);
 MENUITEM_FUNCTION(android_switch_firmware_item, 0, ID2P(LANG_SWITCH_FIRMWARE),
@@ -563,7 +575,7 @@ MAKE_MENU(info_menu, ID2P(LANG_SYSTEM), 0, Icon_System_menu,
             &android_switch_firmware_item, &android_update_item,
             &show_info_item, &show_credits_item,
             &show_runtime_item, &show_legal_item,
-            &debug_menu_item, &android_restart_item);
+            &debug_menu_item, &car_connection_item, &android_restart_item);
 #else
 MAKE_MENU(info_menu, ID2P(LANG_SYSTEM), 0, Icon_System_menu,
           &show_info_item, &show_credits_item,
