@@ -1,0 +1,15 @@
+{
+  "file": "SNARTY-Y1-update-from-v0.5.zip",
+  "size": 98391667,
+  "unpacked_size": 113774496,
+  "sha256": "06070bc013090c6bd580a1ecb146fc1c12473650269cfa813e400379fd68fb0c",
+  "base_version": "230f848142-260516 / stable-v0.5",
+  "upstream_sha256": "2f1b4e7be0094437d29de24b41303e4e52bd1cbb708923649ccbd19f5909b2c3",
+  "native_libraries_from_signed_apk": 43,
+  "unchanged_components": "All non-Rockbox updater components are byte-identical to official v0.5; theme/profile files are additional.",
+  "host_simulation": "PASS: official v0.5 updater extraction/copy logic; privileged mount/chown/pm/reboot mocked",
+  "preserves": "Music, playlists and existing config.cfg sentinel files preserved in simulation",
+  "signing_certificate_matches_official_v0.5": true,
+  "official_certificate_check": "Verified JAR/v1 signing for the legacy Android API <=19 target; this target does not use APK v2 signatures.",
+  "physical_device_installation": "NOT TESTED"
+}
