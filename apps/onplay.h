@@ -36,6 +36,8 @@ enum onplay_return_code {
     ONPLAY_START_PLAY,
     ONPLAY_PLAYLIST,
     ONPLAY_PLUGIN,
+    ONPLAY_DATABASE,
+    ONPLAY_SYSTEM,
     ONPLAY_FUNC_RETURN, /* for use in hotkey_assignment only */
 };
 

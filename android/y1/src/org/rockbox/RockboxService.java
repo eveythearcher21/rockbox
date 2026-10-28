@@ -81,12 +81,39 @@ import java.util.HashMap;
 
 public class RockboxService extends Service
 {
+    public boolean mediaStorageReady()
+    {
+        return Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState());
+    }
+    /* Called on the core thread; Context.startActivity uses Android's activity
+     * manager and does not manipulate UI views on that thread. */
+    public boolean openVideo(byte[] encodedPath)
+    {
+        try {
+            if (!mediaStorageReady()) return false;
+            File file = VideoFiles.resolve(new File("/sdcard/Videos"),
+                                           new String(encodedPath, "UTF-8"));
+            Intent intent = new Intent(this, RockboxVideoActivity.class);
+            intent.putExtra("video_path", file.getPath());
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            return true;
+        } catch (Exception error) {
+            Logger.e("Could not launch internal video player: " + error.toString());
+            return false;
+        }
+    }
     /* this Service is really a singleton class - well almost. */
     private static RockboxService instance = null;
 
     /* locals needed for the c code and Rockbox state */
     private static volatile boolean rockbox_running;
     private Activity mCurrentActivity = null;
+    private final Handler storageHandler = new Handler(Looper.getMainLooper());
+    private StorageStartGate storageGate;
+    private boolean waitingForStorage;
+    private volatile String startupLibraryError;
+
     private RunForegroundManager mFgRunner;
     private MediaButtonReceiver mMediaButtonReceiver;
     private ResultReceiver mResultReceiver;
@@ -103,6 +130,7 @@ public class RockboxService extends Service
     public static final int RESULT_ERROR_OCCURED = 4;
     public static final int RESULT_LIB_LOADED = 5;
     public static final int RESULT_ROCKBOX_EXIT = 6;
+    public static final int RESULT_STORAGE_WAIT = 7;
 
     public SharedPreferences prefs;
     public ArrayList<String[]> podcasts = new ArrayList<String[]>();
@@ -128,7 +156,30 @@ public class RockboxService extends Service
         mFgRunner = new RunForegroundManager(this);
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Wakelock");
 
-        loadConfig();
+        storageGate = new StorageStartGate(new StorageStartGate.Host() {
+            public boolean mounted() {
+                return Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState());
+            }
+            public void waiting() {
+                if (!waitingForStorage) mMediaButtonReceiver.register();
+                waitingForStorage = true;
+                MediaButtonReceiver.setDpadMode(2);
+                Bundle data = new Bundle();
+                data.putString("state", Environment.getExternalStorageState());
+                putResult(RESULT_STORAGE_WAIT, data);
+            }
+            public boolean start() {
+                waitingForStorage = false;
+                loadConfig();
+                if (!startCore()) return false;
+                mMediaButtonReceiver.register();
+                return true;
+            }
+            public void schedule(Runnable retry, long delayMs) {
+                storageHandler.postDelayed(retry, delayMs);
+            }
+            public void remove(Runnable retry) { storageHandler.removeCallbacks(retry); }
+        });
         Connectivity.setContext(this);
     }
 
@@ -178,8 +229,10 @@ public class RockboxService extends Service
         if (intent.hasExtra("callback"))
             mResultReceiver = (ResultReceiver) intent.getParcelableExtra("callback");
 
-        if (!rockbox_running)
-            startService();
+        if (!rockbox_running) {
+            storageGate.request();
+            return;
+        }
 
         if (intent.getAction().equals(Intent.ACTION_MEDIA_BUTTON))
         {
@@ -198,7 +251,6 @@ public class RockboxService extends Service
         mMediaButtonReceiver.register();
         putResult(RESULT_SERVICE_RUNNING);
 
-        rockbox_running = true;
     }
 
     public void onStart(Intent intent, int startId) {
@@ -215,16 +267,9 @@ public class RockboxService extends Service
         return START_STICKY;
     }
 
-    private void startService()
+    private boolean startCore()
     {
-        while (!Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
-            try {
-                Log.d("RockboxService", "SD not ready yet, postponing start.");
-                Thread.sleep(100); // wait a little bit before checkign again if the SD is mounted
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        startupLibraryError = null;
         final Object lock = new Object();
         Thread rb = new Thread(new Runnable()
         {
@@ -254,7 +299,7 @@ public class RockboxService extends Service
                  * because there's no other way to ship files and have access
                  * to them from native code
                  */
-                File libMisc = new File("/data/data/org.rockbox/lib/libmisc.so");
+                File libMisc = new File(getApplicationInfo().nativeLibraryDir, "libmisc.so");
                 /* use arbitrary file to determine whether extracting is needed */
                 File arbitraryFile = new File(rockboxCreditsPath, "credits.rock");
                 File rockboxInfoFile = new File(rockboxSdDirPath, "rockbox-info.txt");
@@ -267,9 +312,18 @@ public class RockboxService extends Service
                 synchronized (lock) {
                     Bundle bdata = new Bundle();
                     bdata.putBoolean("unzip", doExtract);
-                    System.loadLibrary("rockbox");
-                    putResult(RESULT_LIB_LOADED, bdata);
-                    lock.notify();
+                    try {
+                        System.loadLibrary("rockbox");
+                        putResult(RESULT_LIB_LOADED, bdata);
+                    } catch (LinkageError error) {
+                        startupLibraryError = error.toString();
+                        Bundle data = new Bundle();
+                        data.putString("error", "Rockbox library could not load: " + startupLibraryError);
+                        putResult(RESULT_ERROR_OCCURED, data);
+                        return;
+                    } finally {
+                        lock.notify();
+                    }
                 }
 
                 if (doExtract)
@@ -338,7 +392,11 @@ public class RockboxService extends Service
                         Bundle bundle = new Bundle();
                         e.printStackTrace();
                         bundle.putString("error", getString(R.string.error_extraction));
+                        storageHandler.post(new Runnable() {
+                            public void run() { if (storageGate != null) storageGate.failed(); }
+                        });
                         putResult(RESULT_ERROR_OCCURED, bundle);
+                        return;
                     }
                 }
 
@@ -371,8 +429,10 @@ public class RockboxService extends Service
                     }
                 }
 
-                /* Start native code */
+                /* Do not enable native input/surfaces during resource extraction. */
+                rockbox_running = true;
                 putResult(RESULT_INVOKING_MAIN);
+                putResult(RESULT_SERVICE_RUNNING);
 
                 main();
 
@@ -397,6 +457,7 @@ public class RockboxService extends Service
                 break;
             }
         }
+        return startupLibraryError == null;
     }
 
     private native void main();
@@ -420,6 +481,7 @@ public class RockboxService extends Service
     @Override
     public void onDestroy()
     {
+        if (storageGate != null) storageGate.cancel();
         super.onDestroy();
         /* Don't unregister so we can receive them (and startup the service)
          * after idle power-off. Hopefully it's OK if mMediaButtonReceiver is
@@ -531,7 +593,9 @@ public class RockboxService extends Service
     } 
     public void loadConfig() {
         String configPath = "/sdcard/.rockbox/wifi.cfg";
-        try (BufferedReader reader = new BufferedReader(new FileReader(configPath))) {
+        BufferedReader reader = null;
+        try {
+            reader = new BufferedReader(new FileReader(configPath));
             String line;
             int i = 0;
             String[] curPodcast = new String[2];
@@ -568,6 +632,11 @@ public class RockboxService extends Service
 
         } catch (IOException e) {
             Log.d("RockboxService", "Error reading podcast config: " + e.getMessage());
+        } finally {
+            if (reader != null) {
+                try { reader.close(); }
+                catch (IOException error) { Log.d("RockboxService", "Error closing config", error); }
+            }
         }
     }
 

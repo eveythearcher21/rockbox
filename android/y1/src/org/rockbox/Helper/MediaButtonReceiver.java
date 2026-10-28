@@ -23,6 +23,7 @@ package org.rockbox.Helper;
 
 import org.rockbox.RockboxFramebuffer;
 import org.rockbox.RockboxService;
+import org.rockbox.RockboxVideoActivity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -148,6 +149,14 @@ public class MediaButtonReceiver
         @Override
         public void onReceive(Context context, Intent intent)
         {
+            if (prefs == null)
+                prefs = context.getSharedPreferences("app_state", Context.MODE_PRIVATE);
+            if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction()) &&
+                RockboxVideoActivity.handleMediaButton(
+                    (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT))) {
+                if (isOrderedBroadcast()) abortBroadcast();
+                return;
+            }
             int dpad_mode = prefs.getInt("dpad_mode", 0);
             if (dpad_mode > 0){
                 if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
@@ -180,6 +189,16 @@ public class MediaButtonReceiver
                     }
                 }
             } else{
+                RockboxService readyService = RockboxService.getInstance();
+                if (readyService == null || !readyService.isRockboxRunning()) {
+                    if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
+                        KeyEvent pending = (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+                        if (pending != null && pending.getAction() == KeyEvent.ACTION_UP)
+                            startService(context, intent);
+                        if (isOrderedBroadcast()) abortBroadcast();
+                    }
+                    return; /* No native button calls before startup. */
+                }
                 if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction()))
                 {
                     KeyEvent key = (KeyEvent)intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
@@ -259,9 +278,11 @@ public class MediaButtonReceiver
         {
             Logger.d("Audio focus" + ((focusChange>0)?"gained":"lost")+
                                          ": "+ focusChange);
-            if (running)
+            RockboxService service = RockboxService.getInstance();
+            if (running && service != null && service.isRockboxRunning())
             {   /* Play nice and stop for the the other app */
-                if (focusChange == AudioManager.AUDIOFOCUS_LOSS)
+                if (focusChange == AudioManager.AUDIOFOCUS_LOSS &&
+                    !RockboxVideoActivity.isActive())
                     RockboxFramebuffer.buttonHandler(KeyEvent.KEYCODE_MEDIA_STOP, false);
             }
         }

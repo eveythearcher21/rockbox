@@ -1267,6 +1267,30 @@ static inline long min_in_ms(long ms)
     return (ms/1000) / 60;
 }
 
+/* Canonical artist is a real string index; aggregate all its track counts. */
+static long artist_playcount(int32_t artist_seek)
+{
+    struct tagcache_search tracks;
+    char filename[MAX_PATH];
+    long total = 0;
+    if (!tagcache_search(&tracks, tag_filename))
+        return 0;
+    if (!tagcache_search_add_filter(&tracks, tag_virt_canonicalartist, artist_seek))
+    {
+        tagcache_search_finish(&tracks);
+        return 0;
+    }
+    while (tagcache_get_next(&tracks, filename, sizeof(filename)))
+    {
+        long plays = tagcache_get_numeric(&tracks, tag_playcount);
+        if (plays > 0)
+            total = plays > LONG_MAX - total ? LONG_MAX : total + plays;
+        yield();
+    }
+    tagcache_search_finish(&tracks);
+    return total;
+}
+
 static long check_virtual_tags(int tag, int idx_id,
                                const struct index_entry *idx)
 {
@@ -1274,6 +1298,9 @@ static long check_virtual_tags(int tag, int idx_id,
 
     switch (tag)
     {
+        case tag_virt_artistplays:
+            return artist_playcount(tc_find_tag(tag_virt_canonicalartist, idx_id, idx));
+
         case tag_virt_length_sec:
             data = sec_in_ms(tc_find_tag(tag_length, idx_id, idx));
             break;
@@ -1343,9 +1370,11 @@ long tagcache_get_numeric(const struct tagcache_search *tcs, int tag)
     if (!TAGCACHE_IS_NUMERIC(tag))
         return -1;
 
+    /* A unique artist search has a tag-file seek, not a master track index. */
+    if (tag == tag_virt_artistplays && tcs->type == tag_virt_canonicalartist)
+        return artist_playcount(tcs->result_seek);
     if (!get_index(tcs->masterfd, tcs->idx_id, &idx, true))
         return -2;
-
     return check_virtual_tags(tag, tcs->idx_id, &idx);
 }
 

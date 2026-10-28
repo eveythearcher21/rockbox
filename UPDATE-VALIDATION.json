@@ -1,0 +1,11 @@
+{
+  "build": "SNARTY-Y1-6",
+  "sha256": "ef6ed28e142ca3e5afed6303ac28b82cc44ee27e5fa1c8b2c6bfc82f39e60d08",
+  "native_build": "PASS target310 480x360",
+  "java_resources": "PASS strict API17 compilation",
+  "signature_alignment_zip": "PASS API17 and full signature verification, matching recovery certificate, zipalign4 and ZIP integrity",
+  "tests": "PASS video file policy/timeline, StorageStartGate and ASan/UBSan JNI bridge",
+  "layout": "Entire viewport for aspect-fit video; seek overlay hidden except seeking, hides after 1200ms",
+  "crash_handling": "Guard decoder operations and inactive callbacks; no claim all crashes eliminated",
+  "physical_device": "PENDING Y1 fullscreen, seek/hide, playback/audio, pause/resume, Back/reentry and boot. No Android emulator/device available."
+}

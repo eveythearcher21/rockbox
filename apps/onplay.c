@@ -1252,10 +1252,110 @@ static int onplaymenu_callback(int action,
                                const struct menu_item_ex *this_item,
                                struct gui_synclist *this_list);
 
+#ifdef HAVE_TAGCACHE
+static char *current_library_name(int item, void *data, char *buf, size_t size)
+{
+    (void)item;
+    struct mp3entry *id3 = audio_current_track();
+    bool artist = (intptr_t)data != 0;
+    const char *name = id3 ? (artist ? id3->artist : id3->album) : NULL;
+    strmemccpy(buf, name && name[0] ? name : (artist ? "Unknown Artist" : "Unknown Album"), size);
+    return buf;
+}
+
+static int current_library_callback(int action, const struct menu_item_ex *item,
+                                    struct gui_synclist *list)
+{
+    (void)list;
+    bool artist = (intptr_t)item->menu_get_name_and_icon->list_get_name_data != 0;
+    struct mp3entry *id3 = audio_current_track();
+    const char *name = id3 ? (artist ? id3->artist : id3->album) : NULL;
+    if (action == ACTION_REQUEST_MENUITEM && (!name || !name[0] || !tagcache_is_usable()))
+        return ACTION_EXIT_MENUITEM;
+    if (action == ACTION_EXIT_MENUITEM && name && name[0])
+        tagtree_select_root_entry(artist ? "Current Artist" : "Current Album");
+    return action;
+}
+
+static int play_similar_songs(void)
+{
+    struct mp3entry *id3 = audio_current_track();
+    if (global_settings.party_mode)
+        return 0;
+    if (!id3 || !id3->genre_string || !id3->genre_string[0] ||
+        !tagcache_is_usable())
+    {
+        splash(HZ * 2, "A genre tag and initialized database are required");
+        return 0;
+    }
+    char genre[TAG_MAXLEN];
+    strmemccpy(genre, id3->genre_string, sizeof(genre));
+    struct tagcache_search search;
+    struct tagcache_search_clause clause = {
+        .tag = tag_genre, .type = clause_is, .str = genre,
+    };
+    if (!tagcache_search(&search, tag_filename))
+        return 0;
+    tagcache_search_add_clause(&search, &clause);
+    const char *temp = ROCKBOX_DIR "/snarty-similar.tmp.m3u8";
+    int fd = open(temp, O_WRONLY | O_CREAT | O_EXCL, 0666);
+    if (fd < 0)
+    {
+        tagcache_search_finish(&search);
+        splash(HZ * 2, "Cannot create temporary genre playlist");
+        return 0;
+    }
+    char path[MAX_PATH];
+    int count = 0;
+    bool failed = false;
+    while (tagcache_get_next(&search, path, sizeof(path)))
+    {
+        if (fdprintf(fd, "%s\n", path) <= 0)
+        {
+            failed = true;
+            break;
+        }
+        count++;
+        yield();
+    }
+    tagcache_search_finish(&search);
+    if (close(fd) < 0)
+        failed = true;
+    if (!failed && count && warn_on_pl_erase())
+    {
+        if (playlist_create(NULL, NULL) >= 0 &&
+            playlist_insert_playlist(NULL, temp, PLAYLIST_INSERT_LAST, false) >= 0)
+        {
+            playlist_shuffle(current_tick, 0);
+            playlist_start(0, 0, 0);
+            onplay_result = ONPLAY_START_PLAY;
+        }
+        else
+            splash(HZ * 2, "Could not load genre playlist");
+    }
+    remove(temp);
+    return 0;
+}
+
+MENUITEM_FUNCTION(similar_songs_item, 0, "Play Similar Songs",
+                  play_similar_songs, NULL, Icon_Audio);
+
+MENUITEM_RETURNVALUE_DYNTEXT(current_album_item, GO_TO_DBBROWSER,
+    current_library_callback, current_library_name, NULL, (void *)0, Icon_Audio);
+MENUITEM_RETURNVALUE_DYNTEXT(current_artist_item, GO_TO_DBBROWSER,
+    current_library_callback, current_library_name, NULL, (void *)1, Icon_Audio);
+#endif
+
+MENUITEM_RETURNVALUE(wps_system_item, ID2P(LANG_SYSTEM), GO_TO_SYSTEM_SCREEN,
+                         NULL, Icon_System_menu);
+
 /* used when onplay() is called in the CONTEXT_WPS context */
 MAKE_ONPLAYMENU( wps_onplay_menu, ID2P(LANG_ONPLAY_MENU_TITLE),
            onplaymenu_callback, Icon_Audio,
-           &wps_playlist_menu, &cat_playlist_menu,
+#ifdef HAVE_TAGCACHE
+           &current_album_item, &current_artist_item, &similar_songs_item,
+#endif
+           &cat_playlist_menu, &wps_playlist_menu,
            &sound_settings, &playback_settings,
 #ifdef HAVE_TAGCACHE
            &rating_item,
@@ -1269,6 +1369,7 @@ MAKE_ONPLAYMENU( wps_onplay_menu, ID2P(LANG_ONPLAY_MENU_TITLE),
            &context_item_2,
            &context_item_3,
            &context_item_4,
+           &wps_system_item,
          );
 
 int sort_playlists_callback(int action,
@@ -1724,8 +1825,14 @@ int onplay(char* file, int attr, int from_context, bool hotkey, int customaction
         return ONPLAY_MAINMENU;
     if (menu_selection == GO_TO_MAINMENU)
         return ONPLAY_MAINMENU;
+#ifdef HAVE_TAGCACHE
+    if (menu_selection == GO_TO_DBBROWSER)
+        return ONPLAY_DATABASE;
+#endif
     if (menu_selection == GO_TO_PLAYLIST_VIEWER)
         return ONPLAY_PLAYLIST;
+    if (menu_selection == GO_TO_SYSTEM_SCREEN)
+        return ONPLAY_SYSTEM;
     if (menu_selection == GO_TO_PLUGIN)
         return ONPLAY_PLUGIN;
 
