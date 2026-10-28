@@ -1,0 +1,45 @@
+{
+  "build": "SNARTY-Y1-5",
+  "apk": "SNARTY-Y1-5-video.apk",
+  "sha256": "45f11686ef820ba406a7f146e3a480e4700582cb13594565bb6946a03f5c263d",
+  "size": 16488860,
+  "device_baseline": "User confirmed aligned recovery SNARTY-Y1-3 boots and wheel works; actual device Android API17",
+  "java_resources": "PASS: compiled against official Android API17 platform stubs; API19-only AutoCloseable config contract removed",
+  "native": "PASS: target310 480x360; no required main-library imports missing from NDK API17 public stubs",
+  "native_library_count": 43,
+  "dex": "PASS: video Activity, helpers and storage gate are defined; no AutoCloseable/addSuppressed references",
+  "alignment": "PASS: zipalign4 after signing",
+  "signature": "PASS: API17 legacy JAR verification and full v1/v2 verification; same platform key as recovery",
+  "install_location": "internalOnly; use Android package manager for paired app/libraries, no firmware ZIP or key-layout replacement",
+  "storage_gate_tests": "PASS: polling, mounted transition, repeated/reentrant requests, cancellation, library failure retry and post-load initialization failure reset",
+  "video_policy_timeline_tests": "PASS: canonical root, Unicode, symlink escape rejection, seek bounds/overflow and time formatting",
+  "jni_tests": "PASS under ASan/UBSan: UTF8 launch, reference/exception handling, mounted/unavailable/error storage query",
+  "test_clip": {
+    "programs": [],
+    "stream_groups": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "profile": "Constrained Baseline",
+        "codec_type": "video",
+        "width": 320,
+        "height": 240,
+        "level": 20,
+        "r_frame_rate": "25/1"
+      },
+      {
+        "codec_name": "aac",
+        "profile": "LC",
+        "codec_type": "audio",
+        "r_frame_rate": "0/0"
+      }
+    ],
+    "format": {
+      "duration": "20.000000"
+    }
+  },
+  "clip_decode": "PASS: full host FFmpeg decode; 20-second 320x240 H264 Constrained Baseline L2 / AAC-LC with one-second keyframes",
+  "physical_v5_installation_and_video": "PENDING: no connected Y1 or Android emulator; hardware picture, sound, seek/Back and waiting-screen acceptance require device testing",
+  "data": "No packaged listening-history file; existing card data/config kept; video/podcast folder operations refuse unavailable storage",
+  "sync_downloader": "Not modified; actual video must be copied into Videos"
+}

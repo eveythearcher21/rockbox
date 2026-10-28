@@ -1,0 +1,11 @@
+# SNARTY Y1 status/list layout. Same credits and CC-BY-SA 4.0 as SNARTY-Y1.wps.
+%wd
+%Fl(2,15-KodeMono-SemiBold.fnt)
+%Fl(3,22-KodeMono-SemiBold.fnt)
+%V(20,10,440,28,3)
+%alROCKBOX%ar%bl%%
+%V(20,44,440,1,-)
+%dr(0,0,440,1)
+%V(20,52,440,30,3)
+%al%s%Lt
+%Vi(list,20,90,440,240,3)
