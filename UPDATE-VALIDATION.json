@@ -1,0 +1,12 @@
+{
+  "build": "SNARTY-Y1-7",
+  "sha256": "2aacd4153492a6dd95da92a01e4567400f1ac304b1526a693615e4b1b805e974",
+  "native_build": "PASS target310 480x360",
+  "java_resources": "PASS strict API17 compilation",
+  "signature_alignment_zip": "PASS API17 and full signatures, matching recovery certificate, zipalign4, ZIP integrity",
+  "decoder_worker_test": "PASS actual AsyncVideoView with recording Android stubs: no UI decoder calls, cached metadata, seek errors, stale callback suppression, bounded polling, nonblocking close while open deliberately blocked",
+  "other_tests": "PASS video file policy/timeline, storage gate, ASan/UBSan JNI bridge",
+  "device_evidence": "User reports one MP4 works, others fail. Supplied log contains no player crash or decoder error. Exact codec/cause unconfirmed.",
+  "limitation": "No new decoder codecs/transcoding. Vendor media server or hardware hangs may persist. No physical Y1 or emulator validation.",
+  "physical_device": "PENDING formerly failing MP4, normal picture/audio, seek, fullscreen/bar hiding, Back/reentry and cold startup"
+}
