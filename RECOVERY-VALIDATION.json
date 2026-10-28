@@ -1,0 +1,9 @@
+{
+  "file": "SNARTY-Y1-3-recovery.apk",
+  "sha256": "cf45feb6b8739169af746dc433768f0f26dcb90b11b9a30bd3beeed3271d7131",
+  "payload": "Byte-identical code/resources/native libraries to SNARTY-Y1-3; aligned and re-signed",
+  "alignment": "PASS: zipalign 4",
+  "API17_signature": "PASS: legacy JAR signing for Android API17; same platform certificate",
+  "physical_device_installation": "NOT TESTED",
+  "source": "https://github.com/eveythearcher21/rockbox/tree/snarty-y1-revision-3-25866255"
+}
