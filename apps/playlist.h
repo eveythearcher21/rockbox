@@ -120,6 +120,8 @@ void playlist_shutdown(void);
 int playlist_create(const char *dir, const char *file);
 int playlist_resume(void);
 int playlist_shuffle(int random_seed, int start_index);
+/* Fresh shuffled queue: all tracks, starting at logical position one. */
+int playlist_shuffle_all(int random_seed);
 unsigned int playlist_get_filename_crc32(struct playlist_info *playlist,
                                          int index);
 void playlist_resume_track(int start_index, unsigned int crc,

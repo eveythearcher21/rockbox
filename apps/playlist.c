@@ -3703,6 +3703,25 @@ int playlist_shuffle(int random_seed, int start_index)
     return playlist->index;
 }
 
+/* Shuffle action starts a new full pass, independent of Play Selected First
+ * and any previous rotated playlist origin. Keep the ordinary shuffle API's
+ * current-track preservation behavior for other callers. */
+int playlist_shuffle_all(int random_seed)
+{
+    struct playlist_info* playlist = &current_playlist;
+    int result = -1;
+    dc_thread_stop(playlist);
+    playlist_write_lock(playlist);
+    if (playlist->amount > 0)
+    {
+        playlist->index = playlist->first_index = 0;
+        result = randomise_playlist_unlocked(playlist, random_seed, false, true);
+    }
+    playlist_write_unlock(playlist);
+    dc_thread_start(playlist, true);
+    return result;
+}
+
 /* Marks the index of the track to be skipped that is "steps" away from
  * current playing track.
  */

@@ -1,0 +1,17 @@
+{
+  "build": "SNARTY-Y1-9",
+  "sha256": "1ddadb3ad20086b3c2cd21f533e41bd6381f8d4e831b2676d0e68bf5e8958e1b",
+  "native_build": "PASS target310 480x360",
+  "java_resources": "PASS strict API17 compilation",
+  "signature_alignment_zip": "PASS API17 and full signatures, matching recovery certificate, zipalign4, ZIP integrity",
+  "shuffle_tests": "PASS ASan/UBSan actual production shuffle functions: reproduced regression, 1..26 tracks, every prior origin, both Play Selected First values, 20 seeds; all entries exactly once and persisted origin zero",
+  "startup_tests": "PASS automatic storage/error retries and once-only append migration preserving later user settings",
+  "standby_policy": "Foreground service and separate partial CPU wake lock; screen may turn off, higher standby battery use",
+  "decoder_worker_test": "PASS actual AsyncVideoView with recording Android stubs: no UI decoder calls, cached metadata, seek errors, stale callback suppression, bounded polling, nonblocking close while open deliberately blocked",
+  "other_tests": "PASS video file policy/timeline, storage gate, ASan/UBSan JNI bridge",
+  "device_evidence": "User reports periodic reboot/idle wake failures and manual Retry. Exact reboot cause not established; startup/service/idle settings paths addressed.",
+  "limitation": "No new decoder codecs/transcoding. Vendor media server or hardware hangs may persist. No physical Y1 or emulator validation.",
+  "physical_device": "PENDING unplugged boot without manual Retry, screen off 10+ minutes then wake, paused/resumed music, video Back/reentry, battery behavior",
+  "simulator_shuffle": "PASS actual menu/catalog/viewer paths: 26-file playlist WPS 1 of 26, persisted shuffle origin0; two-song album WPS starts1, both paths present and persisted origin0; Play Selected First on; original saved playlist unchanged. Evidence /tmp/snarty-navigation-spp7i3qa.",
+  "payload": "PASS packaged StartupConfig, AsyncVideoView and Rockbox:session; no Retry storage UI string"
+}
