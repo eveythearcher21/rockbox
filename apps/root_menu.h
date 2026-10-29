@@ -67,6 +67,13 @@ enum {
 #ifdef INNIOASIS_Y1
     GO_TO_FM_RADIO_APP,
 #endif
+#ifdef HAVE_TAGCACHE
+    GO_TO_LIBRARY_SONGS,
+    GO_TO_LIBRARY_ARTISTS,
+    GO_TO_LIBRARY_GENRE,
+    GO_TO_LIBRARY_YEAR,
+    GO_TO_LIBRARY_SEARCH,
+#endif
 };
 #ifndef PLUGIN
 extern struct menu_item_ex root_menu_;

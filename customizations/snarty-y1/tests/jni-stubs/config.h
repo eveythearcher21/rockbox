@@ -1,0 +1,1 @@
+/* Host JNI bridge test configuration only. */

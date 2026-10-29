@@ -2071,6 +2071,7 @@ target/hosted/android/shutdown-android.c
 target/hosted/android/reset-bluetooth-android.c
 target/hosted/android/update-android.c
 target/hosted/android/connectivity-android.c
+target/hosted/android/video-android.c
 #endif
 #ifdef APPLICATION
 target/hosted/android/app/button-application.c

@@ -37,6 +37,9 @@
 #include "power.h"
 #include "talk.h"
 #include "audio.h"
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
+#include "button.h"
+#endif
 #include "shortcuts.h"
 
 #ifdef HAVE_HOTSWAP
@@ -301,6 +304,10 @@ static int browser(void* param)
     };
 
     ret_val = rockbox_browse(&browse);
+#ifdef HAVE_TAGCACHE
+    if ((intptr_t)param == GO_TO_DBBROWSER)
+        tagtree_restore_navigation(tc); /* Home/WPS exits must not save shortcut state. */
+#endif
 
     if (ret_val == GO_TO_WPS
         || ret_val == GO_TO_PREVIOUS_MUSIC
@@ -483,10 +490,23 @@ extern struct menu_item_ex
 #ifdef INNIOASIS_Y1
 extern struct menu_item_ex fm_radio_app_item;
 #endif
+#ifdef HAVE_TAGCACHE
+static int library_browser(void *entry)
+{
+    tagtree_select_root_entry(entry);
+    return browser((void *)GO_TO_DBBROWSER);
+}
+#endif
+
 static const struct root_items items[] = {
     [GO_TO_FILEBROWSER] =   { browser, (void*)GO_TO_FILEBROWSER, &file_menu},
 #ifdef HAVE_TAGCACHE
     [GO_TO_DBBROWSER] =     { browser, (void*)GO_TO_DBBROWSER, &tagcache_menu },
+    [GO_TO_LIBRARY_SONGS] = { library_browser, "Songs", &tagcache_menu },
+    [GO_TO_LIBRARY_ARTISTS] = { library_browser, "Artists", &tagcache_menu },
+    [GO_TO_LIBRARY_GENRE] = { library_browser, "Genre", &tagcache_menu },
+    [GO_TO_LIBRARY_YEAR] = { library_browser, "Year", &tagcache_menu },
+    [GO_TO_LIBRARY_SEARCH] = { library_browser, "Search", &tagcache_menu },
 #endif
     [GO_TO_WPS] =           { wpsscrn, NULL, &playback_settings },
     [GO_TO_MAINMENU] =      { miscscrn, (struct menu_item_ex*)&main_menu_,
@@ -526,6 +546,11 @@ MENUITEM_RETURNVALUE(file_browser, ID2P(LANG_DIR_BROWSER), GO_TO_FILEBROWSER,
 #ifdef HAVE_TAGCACHE
 MENUITEM_RETURNVALUE(db_browser, ID2P(LANG_TAGCACHE), GO_TO_DBBROWSER,
                         NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_songs, "Songs", GO_TO_LIBRARY_SONGS, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_artists, "Artists", GO_TO_LIBRARY_ARTISTS, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_genre, "Genre", GO_TO_LIBRARY_GENRE, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_year, "Year", GO_TO_LIBRARY_YEAR, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_search, "Search", GO_TO_LIBRARY_SEARCH, NULL, Icon_Questionmark);
 #endif
 MENUITEM_RETURNVALUE(rocks_browser, ID2P(LANG_PLUGINS), GO_TO_BROWSEPLUGINS,
                         NULL, Icon_Plugin);
@@ -568,6 +593,11 @@ static struct menu_table menu_table[] = {
     { "files", &file_browser },
 #ifdef HAVE_TAGCACHE
     { "database", &db_browser },
+    { "songs", &library_songs },
+    { "artists", &library_artists },
+    { "genre", &library_genre },
+    { "year", &library_year },
+    { "search", &library_search },
 #endif
     { "wps", &wps_item },
     { "settings", &menu_ },
@@ -668,11 +698,21 @@ void root_menu_set_default(void* setting, void* defaultval)
     root_menu_.submenus = (const struct menu_item_ex **)&root_menu__;
     root_menu_.callback_and_desc = &root_menu_desc;
 
+    unsigned count = 0;
     for (i=0; i<MAX_MENU_ITEMS; i++)
     {
-        root_menu__[i] = (struct menu_item_ex *)menu_table[i].item;
+#ifdef HAVE_TAGCACHE
+        /* Library shortcuts are opt-in through root menu order. */
+        if (menu_table[i].item == &library_songs ||
+            menu_table[i].item == &library_artists ||
+            menu_table[i].item == &library_genre ||
+            menu_table[i].item == &library_year ||
+            menu_table[i].item == &library_search)
+            continue;
+#endif
+        root_menu__[count++] = (struct menu_item_ex *)menu_table[i].item;
     }
-    root_menu_.flags |= MENU_ITEM_COUNT(MAX_MENU_ITEMS);
+    root_menu_.flags |= MENU_ITEM_COUNT(count);
     *(bool*)setting = false;
 }
 
@@ -863,7 +903,7 @@ static int load_plugin_screen(char *key)
 
 static void ignore_back_button_stub(bool ignore)
 {
-#if (defined(PLATFORM_ANDROID) || defined(INNIOASIS_Y1))
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
     /* BACK button to be handled by Android instead of rockbox */
     android_ignore_back_button(ignore);
 #else
@@ -981,6 +1021,10 @@ void root_menu(void)
                 ignore_back_button_stub(true);
 
                 next_screen = do_menu(&root_menu_, &selected, NULL, false);
+#ifdef HAVE_TAGCACHE
+                if (next_screen == GO_TO_DBBROWSER)
+                    tagtree_select_root_entry(NULL);
+#endif
 
                 ignore_back_button_stub(false);
 
