@@ -108,6 +108,7 @@ int list_get_nb_lines(struct gui_synclist *list, enum screen_type screen)
     return lines;
 }
 
+#include "snarty_navigation.h"
 void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
 {
     struct viewport *vp = list->parent[screen];
@@ -120,6 +121,9 @@ void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
         list->line_height[screen] = line_height + global_settings.list_line_padding;
 #else
     list->line_height[screen] = line_height;
+#endif
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(screen==SCREEN_MAIN)list->line_height[screen]=MAX(list->line_height[screen],LCD_WIDTH*46/480);
 #endif
 }
 

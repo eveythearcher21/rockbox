@@ -44,6 +44,10 @@
 #include "misc.h"
 #include "strnatcmp.h"
 #include "keyboard.h"
+#ifdef INNIOASIS_Y1
+#include "video-android.h"
+#include "audio.h"
+#endif
 
 #ifdef HAVE_MULTIVOLUME
 #include "mv.h"
@@ -450,6 +454,15 @@ int ft_load(struct tree_context* c, const char* tempdir)
             cmp_data._compar = strncasecmp;
     }
 
+#ifdef INNIOASIS_Y1
+    /* The syncer supplies sortable chronology prefixes inside show folders. */
+    const char *podcast_root="/sdcard/Podcasts";
+    size_t podcast_len=strlen(podcast_root);
+    if(!strncmp(c->currdir,podcast_root,podcast_len) &&
+       (c->currdir[podcast_len]=='/'||c->currdir[podcast_len]=='\0')){
+        cmp_data.sort_file=SORT_ALPHA;cmp_data._compar=strnatcasecmp_n;
+    }
+#endif
     qsort(tree_get_entries(c), files_in_dir, sizeof(struct entry), compare);
 
     /* If thumbnail talking is enabled, make an extra run to mark files with
@@ -591,6 +604,32 @@ int ft_enter(struct tree_context* c)
         c->selected_item=0;
     }
     else {
+#ifdef INNIOASIS_Y1
+        /* MP4 is also an audio extension. Route files in Videos before the
+         * audio branch so they never replace the music queue with audio only. */
+        const char *extension = strrchr(buf, '.');
+        if (!strncmp(buf, "/sdcard/Videos/", sizeof("/sdcard/Videos/") - 1) &&
+            extension && !strcasecmp(extension, ".mp4"))
+        {
+            if (!android_media_storage_ready())
+            {
+                splash(HZ * 3, "Card unavailable. Turn off USB storage sharing.");
+                return rc;
+            }
+            int status = audio_status();
+            bool was_playing = (status & AUDIO_STATUS_PLAY) &&
+                               !(status & AUDIO_STATUS_PAUSE);
+            if (was_playing)
+                audio_pause();
+            if (!android_play_video(buf))
+            {
+                if (was_playing)
+                    audio_resume();
+                splash(HZ * 2, "Could not open video player");
+            }
+            return rc;
+        }
+#endif
         bool play = false;
         int start_index=0;
 

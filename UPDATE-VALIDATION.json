@@ -1,0 +1,40 @@
+{
+  "build": "SNARTY-Y1-12",
+  "status": "experimental shared-list/artwork rebrand and idle-image test",
+  "sha256": "f9b2860735e36b3125773c711a17de0f84203b6c914f7ffa5d76fdd5fbdf9ca3",
+  "size": 16673180,
+  "build_and_package": "PASS target310480x360, no new C warnings; strict API17 Java/resources with JDK obsolete/deprecation notices;43 native libraries; exact paired source skin/font/plugin assets; unique ZIP entries/integrity",
+  "signatures": "PASS API17 v1 and full v1/v2, same recovery/revision11 platform certificate, zipalign4",
+  "screensaver": "PASS actual Java helper with mocked Android clock/bitmap: exact480x360 requirement,60second idle, full canvas draw, input dismissal, lifecycle reload, rejection of wrong dimensions/oversize/missing file. Activity/SurfaceView/media-button integration compiles againstAPI17; actual Android/Y1 lifecycle/wheel/wake still pending.",
+  "host_regressions": "PASS actual C library reader/reference writer ASan/UBSan, bounded root lookup, actual pinned font renderer, complete queue shuffle regression; paired-v12 migration backup/once-only/preflight tests pass.",
+  "skin": "PASS actual target480x360 CheckWPS parser for updated WPS",
+  "shared_playback_simulator": {
+    "passed": [
+      "Recently Added Songs starts with synced rank1 Gamma, not file or alphabetical order",
+      "Album cards show real color art, title and artist; synced album rank1 Album B moves above Album A",
+      "Album-Cover-Zoom: 7 distinct actual SDL frames",
+      "Opening an album expands its cover into the playback-sized panel and keeps the song list alongside",
+      "Playing-Sheet-Slide: 6 distinct actual SDL frames",
+      "One click opens the six-item sheet; Back returns to playback; Album shortcut Back also returns to playback",
+      "Synced radio keeps Gamma playing and queues two valid distinct recommendations, skipping the seed, missing file and duplicate",
+      "Lyrics loads enhanced LRC word intervals, changes mint word highlight during actual playback, and Back returns to playback",
+      "Current Playlist opens the recommendation queue and Back returns to playback"
+    ],
+    "highlight_pixel_counts": [
+      97,
+      100,
+      138,
+      173
+    ],
+    "evidence": "/tmp/snarty-navigation-8kt02teg"
+  },
+  "new_art_media_simulator": [
+    "Artist cards use distinct real portrait sidecars and open filtered albums",
+    "Video cards and grouped podcast show/episode views retain functional navigation"
+  ],
+  "settings": "New shared renderer reached Settings and functional Sound/Volume list. Legacy OCR harness misread Sound header; not claimed as a full all-settings GUI pass. Existing controllers/actions are retained. Year/genre/search/normal playlist/Wrapped lists use this same shared row renderer; not every individual screen was re-exercised.",
+  "test_precision": "Known bitmap OCR substitutions explicitly handled; queue membership is additionally asserted against actual saved playlist control file. Video preview uses an MPEG filename supported in simulator; no fake clip is played. Fixtures/images/lyrics/history are synthetic and private. Previews are320x240 shared-code simulator captures, not physical480x360 photographs.",
+  "scope": "Shared native menus/lists, song/artist/album cards, expanding art, video/podcast/media cards, themed WPS/storage wait and idle JPEG. Artist photos and grouped episode files require the documented sync layout. No automatic moving/deleting legacy flat podcasts. Plugin/game/editor-owned screens and Android OS USB dialogs are not all rewritten.",
+  "physical_acceptance": "PENDING owner tests: install/paired migration, all settings/scrolling, actual Y1 portraits/thumbnails, animation speed, screen-off/idle image input, decoder/video, standby/reboot. No attached Y1, Android emulator or provider account test.",
+  "updater_handoff": "ROCKBLOCK-SYNCER-PROMPT.md is a prompt/specification for the separate app. The Windows cropper/updater/provider alignment are not implemented in this firmware repository."
+}

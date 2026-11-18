@@ -75,6 +75,8 @@
 #include "appevents.h"
 
 #include "root_menu.h"
+#include "snarty_navigation.h"
+#include "snarty_albums.h"
 
 static struct gui_synclist tree_lists;
 
@@ -533,7 +535,14 @@ static int update_dir(void)
     if( tc.selected_item >= tc.filesindir)
         tc.selected_item=tc.filesindir-1;
 
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(id3db)snarty_albums_configure(list,&tc);else snarty_media_configure(list,&tc);
+#endif
     gui_synclist_select_item(list, tc.selected_item);
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(id3db&&tagtree_card_kind(&tc)&&tc.selected_item==tc.special_entry_count)
+        list->start_item[SCREEN_MAIN]=tc.selected_item;
+#endif
     gui_synclist_draw(list);
     gui_synclist_speak_item(list);
     return tc.filesindir;
@@ -716,6 +725,9 @@ void set_current_file(const char *path)
 
 static int exit_to_new_screen(int screen)
 {
+#ifdef HAVE_SNARTY_NAVIGATION
+    snarty_albums_leave();
+#endif
     gui_synclist_scroll_stop(&tree_lists);
     return screen;
 }
@@ -775,9 +787,19 @@ static int dirbrowse(void)
         int customaction = ONPLAY_NO_CUSTOMACTION;
         bool do_restore_display = true;
         #ifdef HAVE_TAGCACHE
-            if (id3db && (button == ACTION_STD_OK || button == ACTION_STD_CONTEXT))
+            if (id3db && (button == ACTION_STD_OK || button == ACTION_STD_CONTEXT
+#ifdef HAVE_HOTKEY
+                          || button == ACTION_TREE_HOTKEY
+#endif
+                         ))
             {
                 customaction = tagtree_get_custom_action(&tc);
+                if (customaction < 0)
+                {
+                    if (button != ACTION_STD_OK)
+                        continue; /* Virtual action rows have no file context menu. */
+                    customaction = ONPLAY_NO_CUSTOMACTION;
+                }
                 if (customaction == ONPLAY_CUSTOMACTION_SHUFFLE_SONGS)
                 {
                     /* The code to insert shuffled is on the context branch of the switch so we always go here */
@@ -803,6 +825,9 @@ static int dirbrowse(void)
                         return exit_to_new_screen(GO_TO_PREVIOUS);
                     }
                 }
+#ifdef HAVE_SNARTY_NAVIGATION
+                if(id3db)snarty_album_open(&tc);
+#endif
 #ifdef HAVE_TAGCACHE
                 switch (id3db ? tagtree_enter(&tc, true) : ft_enter(&tc))
 #else
@@ -827,11 +852,31 @@ static int dirbrowse(void)
 
             case ACTION_STD_CANCEL:
                 exit_to_new_screen(0);
+                if (!id3db && tc.browse &&
+                    (tc.browse->flags & BROWSE_ROOT_BOUND) &&
+                    !strcmp(currdir, tc.browse->root))
+                {
+                    exit_func = true;
+                    break;
+                }
+#ifdef HAVE_TAGCACHE
+                if (id3db && tagtree_is_route_root(&tc) &&
+                    tagtree_restore_navigation(&tc))
+                {
+                    return exit_to_new_screen(audio_status() & AUDIO_STATUS_PLAY
+                                              ? GO_TO_WPS : GO_TO_ROOT);
+                }
+#endif
                 if (*tc.dirfilter > NUM_FILTER_MODES && tc.dirlevel < 1) {
                     exit_func = true;
                     break;
                 }
-                if ((*tc.dirfilter == SHOW_ID3DB && tc.dirlevel == 0) ||
+                if ((*tc.dirfilter == SHOW_ID3DB &&
+                     (tc.dirlevel == 0
+#ifdef HAVE_TAGCACHE
+                      || tagtree_is_route_root(&tc)
+#endif
+                     )) ||
                     ((*tc.dirfilter != SHOW_ID3DB && !strcmp(currdir,"/"))))
                 {
                     if (oldbutton == ACTION_TREE_PGLEFT)
@@ -857,6 +902,9 @@ static int dirbrowse(void)
                 break;
 
             case ACTION_STD_MENU:
+#ifdef HAVE_SNARTY_NAVIGATION
+                snarty_navigation_home();
+#endif
                 return exit_to_new_screen(GO_TO_ROOT);
                 break;
 
@@ -1157,7 +1205,15 @@ int rockbox_browse(struct browse_context *browse)
             if (dirfilter != SHOW_ID3DB && (browse->flags & BROWSE_DIRFILTER) == 0)
                 tc.dirfilter = &global_settings.dirfilter;
             tc.browse = browse;
-            set_current_file(browse->root);
+            if (browse->flags & BROWSE_ROOT_BOUND)
+            {
+                set_current_file_ex(browse->root, "");
+                size_t len = strlen(tc.currdir);
+                if (len > 1 && tc.currdir[len - 1] == '/')
+                    tc.currdir[len - 1] = '\0';
+            }
+            else
+                set_current_file(browse->root);
             if (browse->flags&BROWSE_RUNFILE)
                 ret_val = ft_enter(&tc);
             else
