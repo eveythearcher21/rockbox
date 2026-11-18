@@ -1,0 +1,56 @@
+{
+  "version": "SNARTY-Y1-15",
+  "status": "signed experimental build; physical Y1 acceptance pending",
+  "apk": {
+    "name": "SNARTY-Y1-15-song-menus-artwork.apk",
+    "bytes": 16685468,
+    "sha256": "6ad6e54a108efb9ee499a7f5be1a7ae610e82ce7d4025ab391a87c85dbce6f17",
+    "target": 310,
+    "resolution": "480x360",
+    "java_resources_platform": 17,
+    "native_toolchain": "NDKr10e GCC4.9 retained",
+    "native_libraries": 43,
+    "paired_plugins": 167,
+    "signature": "API17 v1 verified; full signature verified; matching existing platform certificate",
+    "zip_alignment": 4
+  },
+  "simulator": {
+    "target": "shared iPod6G simulator, 320x240",
+    "synthetic_media": true,
+    "checks": [
+      "Held Delta menu shows selected Album C/Artist B; Favorite Song targets Delta without replacing Alpha playback",
+      "Selected Album and Artist browse correct library tags; Back restores original Songs list",
+      "Nonplaying Delta lyric preview opens and returns without modifying the current queue",
+      "Selected-song radio starts Delta then its ranked continuation; Artist_Images case-insensitive JPEG naming displays the requested portrait",
+      "Playlist collage has four distinct album colors, ignores duplicate Album A, resolves relative paths; playlist hold opens shared selected-song menu and album Back returns to playlist",
+      "Current Playlist from an external playlist switches to the three-song dynamic queue"
+    ],
+    "screenshots": [
+      "Current-Queue-From-Song-Menu.png",
+      "Named-Artist-Portrait.png",
+      "Playlist-Four-Albums.png",
+      "Playlist-Song-Menu.png",
+      "Selected-Album.png",
+      "Selected-Lyrics-Preview.png",
+      "Selected-Song-Menu.png"
+    ],
+    "scope_note": "Final one-line drive-root relative-playlist-parent fix was rebuilt and packaged after this GUI run; the exercised relative path is inside /Playlists."
+  },
+  "host_checks": [
+    "Java artwork conversion/cache policy against ImageIO-backed Android adapters: crop, dimensions, cache invalidation, corrupt/oversize input and original preservation",
+    "Actual PairedAssets one-time matching lyric plugin copy, backups and preservation of later user customizations",
+    "Production favorites/date rules under ASan/UBSan",
+    "Production RLRL gesture recognition and replay under ASan/UBSan",
+    "Production complete-queue shuffle under ASan/UBSan",
+    "Packaged ZIP integrity, no duplicate entries, exact paired theme and current lyrics plugin, all 167 plugin files nonempty",
+    "Clean final native target build and API17 classes/resources packaging"
+  ],
+  "limits": [
+    "No physical Y1, Android bitmap decoder, video decoder, standby timing or provider integration test performed",
+    "Selected-song nested library navigation bounded to two simultaneous browsers",
+    "Playlist cover scan bounded to 2048 lines; up to four distinct readable album covers, remaining tiles dark",
+    "PNG/WebP portrait conversion bounded to 2048 stems per launch; reopen app then Artists to refresh",
+    "Nonplaying lyrics uses manual Preview without changing current playback clock"
+  ],
+  "migration": "Retains revision12 theme migration marker/settings; installs paired lyrics plugin once with backup; update-install without uninstalling"
+}

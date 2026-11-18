@@ -3,7 +3,7 @@
 	package="org.rockbox"
 	android:versionCode="1"
 	android:versionName="1.0"
-	android:installLocation="auto"
+	android:installLocation="internalOnly"
 	android:sharedUserId="android.uid.system">
 	<application android:icon="@drawable/launcher" 
 		android:label="@string/app_name" 
@@ -26,6 +26,10 @@
 			</intent-filter>
 		</activity>		
 
+        <activity android:name=".RockboxVideoActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|keyboardHidden|screenSize" />
 		<service android:name=".RockboxService">
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN" />

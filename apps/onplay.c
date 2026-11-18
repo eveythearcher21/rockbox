@@ -40,6 +40,10 @@
 #include "playlist_viewer.h"
 #include "talk.h"
 #include "onplay.h"
+#include "snarty_navigation.h"
+#include "snarty_radio.h"
+#include "font.h"
+#include "screen_access.h"
 #include "filetypes.h"
 #include "fileop.h"
 #include "open_plugin.h"
@@ -67,6 +71,7 @@
 #include "storage.h"
 #endif
 #include "language.h"
+#include "snarty_favorites.h"
 
 static int onplay_result = ONPLAY_OK;
 static bool in_queue_submenu = false;
@@ -1252,10 +1257,103 @@ static int onplaymenu_callback(int action,
                                const struct menu_item_ex *this_item,
                                struct gui_synclist *this_list);
 
+#ifdef HAVE_TAGCACHE
+static char *current_library_name(int item, void *data, char *buf, size_t size)
+{
+    (void)item;
+    struct mp3entry *id3 = audio_current_track();
+    bool artist = (intptr_t)data != 0;
+    const char *name = id3 ? (artist ? id3->artist : id3->album) : NULL;
+    strmemccpy(buf, name && name[0] ? name : (artist ? "Unknown Artist" : "Unknown Album"), size);
+    return buf;
+}
+
+static int current_library_callback(int action, const struct menu_item_ex *item,
+                                    struct gui_synclist *list)
+{
+    (void)list;
+    bool artist = (intptr_t)item->menu_get_name_and_icon->list_get_name_data != 0;
+    struct mp3entry *id3 = audio_current_track();
+    const char *name = id3 ? (artist ? id3->artist : id3->album) : NULL;
+    if (action == ACTION_REQUEST_MENUITEM && (!name || !name[0] || !tagcache_is_usable()))
+        return ACTION_EXIT_MENUITEM;
+    if (action == ACTION_EXIT_MENUITEM && name && name[0])
+        tagtree_select_root_entry(artist ? "Current Artist" : "Current Album");
+    return action;
+}
+
+static int play_similar_songs(void)
+{
+    return snarty_play_similar();
+}
+#ifdef HAVE_SNARTY_NAVIGATION
+static int snarty_track_menu(bool playing)
+{
+    static struct mp3entry track;
+    struct mp3entry *now=audio_current_track();
+    if(playing){if(!now)return ONPLAY_OK;copy_mp3entry(&track,now);}
+    else if(!selected_file.path||!get_metadata(&track,-1,selected_file.path)){splash(HZ*2,"Cannot read selected song");return ONPLAY_OK;}
+    char seed[MAX_PATH],album[TAG_MAXLEN],artist[TAG_MAXLEN];
+    strlcpy(seed,track.path,sizeof(seed));strlcpy(album,track.album&&*track.album?track.album:"Unknown Album",sizeof(album));
+    strlcpy(artist,track.artist&&*track.artist?track.artist:"Unknown Artist",sizeof(artist));
+    struct snarty_nav_item choices[]={
+        {album,SN_ICON_ALBUMS,0},{artist,SN_ICON_ARTISTS,1},
+        {"Play Similar Songs",SN_ICON_SONGS,2},{"Lyrics",SN_ICON_SONGS,3},
+        {"Favorite",SN_ICON_FAVORITE,4},{"Add to Playlist...",SN_ICON_PLAYLISTS,5},{"Current Playlist",SN_ICON_PLAYING,6},
+    };
+    int selected=0,choice=playing?snarty_nav_choose_sheet("Now Playing",choices,ARRAYLEN(choices),&selected):snarty_nav_choose("Song",choices,ARRAYLEN(choices),&selected);
+    if(choice==SN_NAV_USB)return ONPLAY_MAINMENU;
+    if(choice<0)return ONPLAY_OK;
+    now=audio_current_track();
+    if(playing&&(!now||strcmp(now->path,seed))){splash(HZ*2,"Track changed. Open its menu again.");return ONPLAY_OK;}
+    if(choice<2){
+        const char *name=choice==0?track.album:track.artist;
+        if(!name||!*name){splash(HZ*2,"This track has no matching library tag");return ONPLAY_OK;}
+        if(playing){tagtree_select_root_entry(choice==0?"Current Album":"Current Artist");return ONPLAY_DATABASE;}
+        int result=tagtree_browse_track(&track,choice==1);
+        return result==GO_TO_WPS?ONPLAY_START_PLAY:ONPLAY_RELOAD_DIR;
+    }
+    if(choice==2){if(snarty_play_similar_for(playing?NULL:&track)>0)return ONPLAY_START_PLAY;}
+    else if(choice==3){
+        char parameter[MAX_PATH+32];
+        bool current=now&&!strcmp(now->path,seed);
+        if(current)strlcpy(parameter,"snarty:lyrics",sizeof(parameter));
+        else snprintf(parameter,sizeof(parameter),"snarty:preview:%s",seed);
+        int ui=screens[SCREEN_MAIN].getuifont();font_lock(ui,true);
+        int result=plugin_load(PLUGIN_APPS_DIR "/lrcplayer.rock",parameter);font_lock(ui,false);
+        if(result==PLUGIN_USB_CONNECTED)return ONPLAY_MAINMENU;
+    }
+    else if(choice==4){
+        const struct snarty_nav_item kinds[]={{"Song?",SN_ICON_SONGS,1},{"Album?",SN_ICON_ALBUMS,2},{"Artist?",SN_ICON_ARTISTS,3}};
+        int position=0,kind=snarty_nav_choose("Favorite",kinds,3,&position);
+        if(kind>=0){int result=snarty_favorite_toggle(&track,kind+1);if(result>=0)tagtree_invalidate();
+            splash(HZ*2,result<0?"Cannot save favorite (check tags/card)":result?"Favorite added":"Favorite rule removed");}
+    }
+    else if(choice==5){strlcpy(selected_file.buf,seed,sizeof(selected_file.buf));selected_file_set(CONTEXT_STD,selected_file.buf,FILE_ATTR_AUDIO);ctx_add_to_playlist=NULL;do_menu(&cat_playlist_menu,NULL,NULL,false);}
+    else if(choice==6)return ONPLAY_PLAYLIST;
+    return playing?ONPLAY_OK:ONPLAY_RELOAD_DIR;
+}
+#endif
+
+MENUITEM_FUNCTION(similar_songs_item, 0, "Play Similar Songs",
+                  play_similar_songs, NULL, Icon_Audio);
+
+MENUITEM_RETURNVALUE_DYNTEXT(current_album_item, GO_TO_DBBROWSER,
+    current_library_callback, current_library_name, NULL, (void *)0, Icon_Audio);
+MENUITEM_RETURNVALUE_DYNTEXT(current_artist_item, GO_TO_DBBROWSER,
+    current_library_callback, current_library_name, NULL, (void *)1, Icon_Audio);
+#endif
+
+MENUITEM_RETURNVALUE(wps_system_item, ID2P(LANG_SYSTEM), GO_TO_SYSTEM_SCREEN,
+                         NULL, Icon_System_menu);
+
 /* used when onplay() is called in the CONTEXT_WPS context */
 MAKE_ONPLAYMENU( wps_onplay_menu, ID2P(LANG_ONPLAY_MENU_TITLE),
            onplaymenu_callback, Icon_Audio,
-           &wps_playlist_menu, &cat_playlist_menu,
+#ifdef HAVE_TAGCACHE
+           &current_album_item, &current_artist_item, &similar_songs_item,
+#endif
+           &cat_playlist_menu, &wps_playlist_menu,
            &sound_settings, &playback_settings,
 #ifdef HAVE_TAGCACHE
            &rating_item,
@@ -1269,6 +1367,7 @@ MAKE_ONPLAYMENU( wps_onplay_menu, ID2P(LANG_ONPLAY_MENU_TITLE),
            &context_item_2,
            &context_item_3,
            &context_item_4,
+           &wps_system_item,
          );
 
 int sort_playlists_callback(int action,
@@ -1710,6 +1809,15 @@ int onplay(char* file, int attr, int from_context, bool hotkey, int customaction
         return ONPLAY_START_PLAY;
     }
 
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(from_context==CONTEXT_WPS || (attr&FILE_ATTR_MASK)==FILE_ATTR_AUDIO)
+    {
+        if(from_context==CONTEXT_ID3DB&&!prepare_database_sel(NULL))return ONPLAY_RELOAD_DIR;
+        push_current_activity(ACTIVITY_CONTEXTMENU);
+        int result=snarty_track_menu(from_context==CONTEXT_WPS);
+        pop_current_activity();return result;
+    }
+#endif
     push_current_activity(ACTIVITY_CONTEXTMENU);
     if (from_context == CONTEXT_WPS)
         menu = &wps_onplay_menu;
@@ -1724,8 +1832,14 @@ int onplay(char* file, int attr, int from_context, bool hotkey, int customaction
         return ONPLAY_MAINMENU;
     if (menu_selection == GO_TO_MAINMENU)
         return ONPLAY_MAINMENU;
+#ifdef HAVE_TAGCACHE
+    if (menu_selection == GO_TO_DBBROWSER)
+        return ONPLAY_DATABASE;
+#endif
     if (menu_selection == GO_TO_PLAYLIST_VIEWER)
         return ONPLAY_PLAYLIST;
+    if (menu_selection == GO_TO_SYSTEM_SCREEN)
+        return ONPLAY_SYSTEM;
     if (menu_selection == GO_TO_PLUGIN)
         return ONPLAY_PLUGIN;
 

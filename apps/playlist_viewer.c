@@ -23,6 +23,9 @@
  * multi-screen support, rewrote a lot of code
  */
 #include <string.h>
+#include "snarty_navigation.h"
+#include "snarty_gesture.h"
+#include "snarty_favorites.h"
 #include "playlist.h"
 #include "audio.h"
 #include "screens.h"
@@ -382,7 +385,7 @@ static bool update_playlist(bool force)
             return false;
         }
         playlist_buffer_load_entries_screen(&viewer.buffer, FORWARD,
-                          viewer.selected_track);
+                          MAX(0, viewer.selected_track));
         if (viewer.buffer.num_loaded <= 0)
         {
             if (!viewer.playlist)
@@ -602,7 +605,7 @@ static void close_playlist_viewer(void)
     if (viewer.playlist)
     {
         if (viewer.initial_selection)
-            *(viewer.initial_selection) = viewer.selected_track;
+            *(viewer.initial_selection) = MAX(0, viewer.selected_track);
 
         if(playlist_modified(viewer.playlist))
         {
@@ -802,7 +805,9 @@ static const char* playlist_callback_name(int selected_item,
                                           char *buffer,
                                           size_t buffer_len)
 {
-    struct playlist_entry *track = pv_get_track(data, selected_item);
+    if (selected_item == 0)
+        return "[Shuffle]";
+    struct playlist_entry *track = pv_get_track(data, selected_item - 1);
 
     format_line(track, buffer, buffer_len);
 
@@ -814,7 +819,9 @@ static enum themable_icons playlist_callback_icons(int selected_item,
                                                    void *data)
 {
     struct playlist_viewer *local_viewer = (struct playlist_viewer *)data;
-    struct playlist_entry *track = pv_get_track(local_viewer, selected_item);
+    if (selected_item == 0)
+        return Icon_Playlist;
+    struct playlist_entry *track = pv_get_track(local_viewer, selected_item - 1);
 
     if (track->index == local_viewer->current_playing_track)
     {
@@ -838,7 +845,12 @@ static enum themable_icons playlist_callback_icons(int selected_item,
 static int playlist_callback_voice(int selected_item, void *data)
 {
     struct playlist_viewer *local_viewer = (struct playlist_viewer *)data;
-    struct playlist_entry *track = pv_get_track(local_viewer, selected_item);
+    if (selected_item == 0)
+    {
+        talk_spell("Shuffle", false);
+        return 0;
+    }
+    struct playlist_entry *track = pv_get_track(local_viewer, selected_item - 1);
 
     if(global_settings.playlist_viewer_icons) {
         if (track->index == local_viewer->current_playing_track)
@@ -880,7 +892,7 @@ static void update_gui(struct gui_synclist * playlist_lists, bool init)
     if (init)
         gui_synclist_init(playlist_lists, playlist_callback_name,
                           &viewer, false, 1, NULL);
-    gui_synclist_set_nb_items(playlist_lists, viewer.num_tracks);
+    gui_synclist_set_nb_items(playlist_lists, viewer.num_tracks + 1);
     gui_synclist_set_voice_callback(playlist_lists,
                                     global_settings.talk_file?
                                     &playlist_callback_voice:NULL);
@@ -888,7 +900,7 @@ static void update_gui(struct gui_synclist * playlist_lists, bool init)
                   global_settings.playlist_viewer_icons?
                   &playlist_callback_icons:NULL);
     gui_synclist_set_title(playlist_lists, viewer.title, Icon_Playlist);
-    gui_synclist_select_item(playlist_lists, viewer.selected_track);
+    gui_synclist_select_item(playlist_lists, viewer.selected_track + 1);
     gui_synclist_draw(playlist_lists);
     gui_synclist_speak_item(playlist_lists);
 }
@@ -972,6 +984,8 @@ static bool open_playlist_viewer(const char* filename,
     if (!viewer.is_open)
         return false;
 
+    if (filename && !reload)
+        viewer.selected_track = 0; /* Song one; Shuffle is one row above. */
     update_gui(playlist_lists, true);
     return true;
 }
@@ -1010,7 +1024,7 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
             /*Needed because update_playlist gives wrong value when
                                                             playing is stopped*/
             viewer.current_playing_track = track;
-            gui_synclist_set_nb_items(&playlist_lists, viewer.num_tracks);
+            gui_synclist_set_nb_items(&playlist_lists, viewer.num_tracks + 1);
 
             gui_synclist_draw(&playlist_lists);
             gui_synclist_speak_item(&playlist_lists);
@@ -1021,8 +1035,13 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
         /* during moving, another redraw is going to be needed,
          * since viewer.selected_track is updated too late (after the first draw)
          * drawing the moving item needs it */
-        viewer.selected_track=gui_synclist_get_sel_pos(&playlist_lists);
-        if (res)
+        viewer.selected_track = gui_synclist_get_sel_pos(&playlist_lists) - 1;
+        if (viewer.selected_track < 0 && viewer.moving_track >= 0)
+        {
+            viewer.selected_track = 0;
+            gui_synclist_select_item(&playlist_lists, 1);
+        }
+        if (res && viewer.selected_track >= 0)
         {
             bool reload = playlist_buffer_needs_reload(&viewer.buffer,
                     viewer.selected_track);
@@ -1035,13 +1054,21 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
         }
         switch (button)
         {
+#ifdef HAVE_SNARTY_NAVIGATION
+            case ACTION_SNARTY_FAVORITES:
+                if(snarty_favorites_shuffle()){ret=PLAYLIST_VIEWER_OK;goto exit;}
+                gui_synclist_draw(&playlist_lists);break;
+#endif
             case ACTION_TREE_WPS:
             case ACTION_STD_CANCEL:
+#ifdef HAVE_SNARTY_NAVIGATION
+            case ACTION_STD_MENU:
+#endif
             {
                 if (viewer.moving_track >= 0)
                 {
                     viewer.selected_track = viewer.moving_track;
-                    gui_synclist_select_item(&playlist_lists, viewer.moving_track);
+                    gui_synclist_select_item(&playlist_lists, viewer.moving_track + 1);
                     viewer.moving_track = -1;
                     viewer.moving_playlist_index = -1;
                     gui_synclist_draw(&playlist_lists);
@@ -1057,6 +1084,23 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
             }
             case ACTION_STD_OK:
             {
+                if (viewer.selected_track < 0)
+                {
+                    if (global_settings.party_mode)
+                        break;
+                    if (viewer.playlist)
+                    {
+                        if (!warn_on_pl_erase())
+                            break;
+                        if (playlist_set_current(viewer.playlist) < 0)
+                            break;
+                        viewer.playlist = NULL;
+                    }
+                    if (playlist_shuffle_all(current_tick) < 0)
+                        break;
+                    playlist_start(0, 0, 0);
+                    goto exit;
+                }
                 struct playlist_entry * current_track =
                             playlist_buffer_get_track(&viewer.buffer,
                                                       viewer.selected_track);
@@ -1105,7 +1149,7 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
                         playlist_start(start_index, 0, 0);
 
                         if (viewer.initial_selection)
-                            *(viewer.initial_selection) = viewer.selected_track;
+                            *(viewer.initial_selection) = MAX(0, viewer.selected_track);
                     }
                     goto exit;
                 }
@@ -1119,6 +1163,16 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
             }
             case ACTION_STD_CONTEXT:
             {
+                if (viewer.selected_track < 0)
+                    break;
+#ifdef HAVE_SNARTY_NAVIGATION
+                struct playlist_entry *song=playlist_buffer_get_track(&viewer.buffer,viewer.selected_track);
+                int song_result=onplay(song->name,FILE_ATTR_AUDIO,CONTEXT_STD,false,ONPLAY_NO_CUSTOMACTION);
+                if(song_result==ONPLAY_START_PLAY){ret=PLAYLIST_VIEWER_OK;goto exit;}
+                if(song_result==ONPLAY_PLAYLIST){pop_current_activity_without_refresh();close_playlist_viewer();filename=NULL;if(!open_playlist_viewer(NULL,&playlist_lists,false,NULL)){ret=PLAYLIST_VIEWER_CANCEL;goto exit;}}
+                else update_playlist(true);
+                gui_synclist_draw(&playlist_lists);break;
+#endif
                 int pv_context_result = context_menu(viewer.selected_track);
 
                 if (pv_context_result == PV_CONTEXT_USB)
@@ -1146,9 +1200,11 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
                 }
                 break;
             }
+#ifndef HAVE_SNARTY_NAVIGATION
             case ACTION_STD_MENU:
                 ret = PLAYLIST_VIEWER_MAINMENU;
                 goto exit;
+#endif
 #ifdef HAVE_QUICKSCREEN
             case ACTION_STD_QUICKSCREEN:
                     /* Shortcuts menu currently disabled in Playlist Viewer */
@@ -1165,6 +1221,8 @@ enum playlist_viewer_result playlist_viewer_ex(const char* filename,
 #ifdef HAVE_HOTKEY
             case ACTION_TREE_HOTKEY:
             {
+                if (viewer.selected_track < 0)
+                    break;
                 struct playlist_entry *current_track = playlist_buffer_get_track(
                                                             &viewer.buffer,
                                                             viewer.selected_track);

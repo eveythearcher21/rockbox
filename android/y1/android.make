@@ -128,8 +128,11 @@ $(BUILDDIR)/$(BINARY): $$(OBJ) $(FIRMLIB) $(VOICESPEEXLIB) $(CORE_LIBS) $(CPUFEA
 $(BINLIB_DIR)/$(BINARY): $(BUILDDIR)/$(BINARY)
 	$(call PRINTS,CP $(BINARY))cp $^ $@
 
-$(BINLIB_DIR)/libmisc.so: $(BUILDDIR)/rockbox.zip
-	$(call PRINTS,CP rockbox.zip)cp $^ $@
+SNARTY_THEME_DIR=$(ROOTDIR)/customizations/snarty-y1/.rockbox
+SNARTY_THEME_FILES=$(wildcard $(SNARTY_THEME_DIR)/*.config $(SNARTY_THEME_DIR)/*/* $(SNARTY_THEME_DIR)/*/*/*)
+$(BINLIB_DIR)/libmisc.so: $(BUILDDIR)/rockbox.zip $(SNARTY_THEME_FILES) $(ROOTDIR)/customizations/snarty-y1/tools/bundle_theme.py
+	$(call PRINTS,CP rockbox.zip)cp $< $@
+	python3 $(ROOTDIR)/customizations/snarty-y1/tools/bundle_theme.py $@ $(SNARTY_THEME_DIR)
 
 $(BINLIB_DIR)/lib%.so: $(RBCODEC_BLD)/codecs/%.codec
 	$(call PRINTS,CP $(@F))cp $^ $@

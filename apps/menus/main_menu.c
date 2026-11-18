@@ -32,6 +32,8 @@
 #include "misc.h"
 #include "exported_menus.h"
 #include "tree.h"
+#include "root_menu.h"
+#include "snarty_navigation.h"
 #include "storage.h"
 #ifdef HAVE_RECORDING
 #include "recording.h"
@@ -586,6 +588,22 @@ MENUITEM_FUNCTION(main_menu_config_item, 0, ID2P(LANG_MAIN_MENU),
 /***********************************/
 /*    MAIN MENU                    */
 
+#ifdef HAVE_SNARTY_NAVIGATION
+MENUITEM_RETURNVALUE(settings_files, "Files", GO_TO_FILEBROWSER, NULL, Icon_Folder);
+MENUITEM_RETURNVALUE(settings_shortcuts, "Shortcuts", GO_TO_SHORTCUTMENU, NULL, Icon_Bookmark);
+MENUITEM_RETURNVALUE(settings_plugins, "Plugins", GO_TO_BROWSEPLUGINS, NULL, Icon_Plugin);
+#ifdef INNIOASIS_Y1
+MENUITEM_RETURNVALUE(settings_fm, "FM Radio", GO_TO_FM_RADIO_APP, NULL, Icon_Radio_screen);
+#elif CONFIG_TUNER
+MENUITEM_RETURNVALUE(settings_fm, "FM Radio", GO_TO_FM, NULL, Icon_Radio_screen);
+#endif
+MAKE_MENU(additional_features_menu, "Additional Features", NULL, Icon_Submenu,
+#if defined(INNIOASIS_Y1) || CONFIG_TUNER
+          &settings_fm,
+#endif
+          &settings_shortcuts, &settings_plugins);
+#endif
+
 MAKE_MENU(main_menu_, ID2P(LANG_SETTINGS), NULL,
         Icon_Submenu_Entered,
 #ifdef INNIOASIS_Y1
@@ -605,6 +623,9 @@ MAKE_MENU(main_menu_, ID2P(LANG_SETTINGS), NULL,
         &main_menu_config_item,
 #endif
         &manage_settings,
+#ifdef HAVE_SNARTY_NAVIGATION
+        &info_menu, &settings_files, &additional_features_menu,
+#endif
         );
 /*    MAIN MENU                    */
 /***********************************/
