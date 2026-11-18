@@ -70,7 +70,7 @@
 #if !defined(INNIOASIS_Y1)
 #define PLUGIN_DIR          ROCKBOX_LIBRARY_PATH "/rockbox/rocks"
 #else
-#define PLUGIN_DIR          ROCKBOX_LIBRARY_PATH "/.rockbox/rocks"
+#define PLUGIN_DIR          ROCKBOX_DIR "/rocks"
 #endif
 #if (CONFIG_PLATFORM & PLATFORM_ANDROID)
 #define CODECS_DIR          ROCKBOX_BINARY_PATH

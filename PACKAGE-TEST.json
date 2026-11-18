@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "plugins": 167,
+  "overlays": 6,
+  "resources": 71,
+  "target": 125,
+  "plugin_api": 285,
+  "api_size": 1608,
+  "scope": "actual APK/ARM binaries; not Android runtime"
+}

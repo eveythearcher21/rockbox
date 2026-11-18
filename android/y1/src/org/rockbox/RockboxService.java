@@ -103,6 +103,10 @@ public class RockboxService extends Service
             return false;
         }
     }
+    public byte[] cachePlugin(byte[] path) {
+        try {return PluginCache.prepare(getDir("plugin-cache",0),new File(new String(path,"UTF-8"))).getPath().getBytes("UTF-8");}
+        catch(Exception e){Log.e("RockboxService","Plugin cache: "+e.getMessage());return null;}
+    }
     /* this Service is really a singleton class - well almost. */
     private static RockboxService instance = null;
 
@@ -354,17 +358,13 @@ public class RockboxService extends Service
                            File file;
                            /* strip off /sdcard/.rockbox when extracting */
                            String fileName = entry.getName();
-                           int slashIndex = fileName.indexOf('/', 1);
-                           /* codecs are now stored as libs, only keep rocks on internal */
-                           if(extractToSd == false
-                               || fileName.substring(slashIndex).startsWith("/rocks"))
-                           {
-                               file = new File(rockboxDirPath + fileName.substring(slashIndex));
-                           }
-                           else
-                           {
-                               file = new File("/sdcard" + fileName.substring(slashIndex));
-                           }
+                           String prefix="sdcard/.rockbox/";
+                           if(!fileName.startsWith(prefix))continue;
+                           String relative=fileName.substring(prefix.length());
+                           if(relative.startsWith("rocks/")||relative.startsWith("rocks.data/"))continue;
+                           file=new File(extractToSd?rockboxSdDirPath:rockboxDirPath,relative);
+                           String base=new File(extractToSd?rockboxSdDirPath:rockboxDirPath).getCanonicalPath()+File.separator;
+                           if(!file.getCanonicalPath().startsWith(base))throw new IOException("Unsafe resource archive path");
 
                            if (!entry.isDirectory())
                            {
@@ -437,6 +437,7 @@ public class RockboxService extends Service
                     StartupConfig.disableIdlePoweroffOnce(new File(rockboxSdDirPath));
                     PairedAssets.install(libMisc,new File(rockboxSdDirPath));
                     PairedAssets.updateLyrics(libMisc,new File(rockboxSdDirPath));
+                    PairedPlugins.install(libMisc,new File(rockboxSdDirPath));
                 } catch (IOException error) {
                     Log.e("RockboxService", "Startup configuration", error);
                     Bundle data = new Bundle();

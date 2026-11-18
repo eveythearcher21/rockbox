@@ -1,30 +1,26 @@
-# SNARTY-Y1-15 song menus/artwork test
+# SNARTY-Y1-15 plugin repair
 
-Includes all revision14 features, plus shared held-song menus, selected-song lyric Preview, automatic playlist collages and named Artist_Images portraits. See NAVIGATION-15.md for controls and limits.
+This is based on exact v15 commit 951d8aa303199ae9c544179bb7c5f5e32ff7551f, not v12 or the Wi-Fi experiment. Keep a backup of the existing .rockbox folder and v15 APK.
 
-Back up .rockbox and keep the prior APK. Put SNARTY-Y1-15-song-menus-artwork.apk beside adb.exe, pause music, then run:
-
-```powershell
-.\adb.exe install --no-streaming -r -f SNARTY-Y1-15-song-menus-artwork.apk
-```
-
-Only after Success:
+Put SNARTY-Y1-15-PLUGINS-FIXED.apk beside adb.exe and update without uninstalling:
 
 ```powershell
+.\adb.exe install --no-streaming -r -f SNARTY-Y1-15-PLUGINS-FIXED.apk
 .\adb.exe shell am start -n org.rockbox/.RockboxActivity
 ```
 
-Finish/eject Windows transfers before unplugging so Android can mount the card. Update-install without uninstalling, flashing a ROM or changing system wheel maps. Settings/music/history/Favorites are retained; no extra theme reset from12/13/14. First mounted launch installs the matching lyrics plugin once with .before-snarty15 backup and .snarty-song-menu-v15 marker.
+Run the second command only after the install reports Success. The package remains org.rockbox and uses the original signing certificate. No data clearing, ROM flashing or wheel-map changes are required.
 
-Hold an audio row in music browsing, file browsing or playlists to open Album, Artist, Play Similar Songs, Lyrics, Favorite, Add to Playlist..., Current Playlist. Actions target the held file. Nonplaying Lyrics opens a manual Preview without interrupting music. Selected Album/Artist Back restores the caller.
+First mounted startup installs all matching bundled plugins automatically to .rockbox/rocks, backing up replaced binaries with .before-plugins15. Existing plugin resource/settings files are preserved. The .snarty-plugins-fixed15 marker makes this once-only so later manual additions are retained.
 
-Artist pictures go in the drive-root Artist_Images folder, e.g. Artist_Images/Daft Punk.jpg or Artist_Images/Björk.png. Match the artist name in the player; JPG/JPEG/BMP load directly. PNG/WebP use a bounded background conversion cache on app/framebuffer reopening. Reopen Artists after conversion; originals are preserved. Keep images modest and paths short. Legacy portrait sidecars remain fallback.
+The separate SNARTY-Y1-15-PLUGINS.zip contains the same complete plugin/resource payload. For manual installation: back up D:\.rockbox, extract the ZIP and merge its .rockbox directory into D:\ so D:\.rockbox\rocks\apps\lrcplayer.rock exists. Replace the matching binaries; preserve user-modified resource/settings files. Safely eject Windows transfers before opening Rockbox; Android cannot access a USB-shared card.
 
-Playlist cards automatically compose up to four distinct albums with artwork into2x2 grids; duplicates don't use extra tiles. Fewer covers leave dark remaining quadrants. No collage upload is required. UTF8 local playlists supported; covers scan at most2048 lines.
+Test Settings > Additional Features > Plugins > Applications/Games/Demos, Files > .rockbox > rocks > apps > lrcplayer.rock, and Lyrics from the playing-song menu. Song-menu Lyrics retains v15's timed SNARTY mode; a nonplaying held song retains its manual Preview. Check real word-LRC highlighting on the player.
 
-Recheck long-click menus/targets/Back, lyric Preview, real artist images and playlist grids on your physical Y1. Cloud previews are actual shared320x240 simulator captures with synthetic music/art, not480x360 device photos. Android bitmap decoder/hardware timing, video and standby acceptance remain pending.
+Application-private plugin-cache files are generated automatically; do not copy plugins into /data or change permissions manually. Android errors are logged with RockboxPlugin or RockboxService tags. To collect diagnostics:
 
-Rollback update-install the matching-signature prior APK, without uninstalling:
-https://github.com/eveythearcher21/rockbox/raw/refs/heads/snarty-y1-favorites-14-d399bcee/SNARTY-Y1-14-favorites-shuffle.apk
+```powershell
+.\adb.exe logcat -d > Y1-plugin-log.txt
+```
 
-Preserve the original lyric plugin backup and all player-managed stores; if manually restoring an older plugin later, remove the specific v15 plugin marker before reapplying15. Source/attribution and full corresponding-source patch are included on this branch.
+Physical Y1/plugin execution and all gameplay remain owner acceptance checks. Some plugins require separately supplied game/media data; this package includes the build's resources, not commercial game assets. Do not describe missing game data as a proven loader failure.

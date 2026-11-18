@@ -130,9 +130,10 @@ $(BINLIB_DIR)/$(BINARY): $(BUILDDIR)/$(BINARY)
 
 SNARTY_THEME_DIR=$(ROOTDIR)/customizations/snarty-y1/.rockbox
 SNARTY_THEME_FILES=$(wildcard $(SNARTY_THEME_DIR)/*.config $(SNARTY_THEME_DIR)/*/* $(SNARTY_THEME_DIR)/*/*/*)
-$(BINLIB_DIR)/libmisc.so: $(BUILDDIR)/rockbox.zip $(SNARTY_THEME_FILES) $(ROOTDIR)/customizations/snarty-y1/tools/bundle_theme.py
+$(BINLIB_DIR)/libmisc.so: $(BUILDDIR)/rockbox.zip $(SNARTY_THEME_FILES) $(ROOTDIR)/customizations/snarty-y1/tools/bundle_theme.py $(ROOTDIR)/customizations/snarty-y1/tools/bundle_plugin_data.py
 	$(call PRINTS,CP rockbox.zip)cp $< $@
 	python3 $(ROOTDIR)/customizations/snarty-y1/tools/bundle_theme.py $@ $(SNARTY_THEME_DIR)
+	python3 $(ROOTDIR)/customizations/snarty-y1/tools/bundle_plugin_data.py $@
 
 $(BINLIB_DIR)/lib%.so: $(RBCODEC_BLD)/codecs/%.codec
 	$(call PRINTS,CP $(@F))cp $^ $@

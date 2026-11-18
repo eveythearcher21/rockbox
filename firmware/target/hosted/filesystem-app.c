@@ -218,6 +218,16 @@ const char * handle_special_dirs(const char *dir, unsigned flags,
     (void) flags; (void) buf; (void) bufsize;
 #ifdef HAVE_SPECIAL_DIRS
 #define HOME_DIR_LEN (sizeof(HOME_DIR)-1)
+#ifdef INNIOASIS_Y1
+    /* Keep previously saved plugin shortcuts usable after moving discovery to storage. */
+    static const char old_plugins[]=ROCKBOX_LIBRARY_PATH "/.rockbox/rocks";
+    size_t old_length=sizeof(old_plugins)-1;
+    if(!strncmp(dir,old_plugins,old_length) && (dir[old_length]=='/' || !dir[old_length]))
+    {
+        if(path_append(buf,ROCKBOX_DIR "/rocks",dir+old_length,bufsize)>=bufsize)return NULL;
+        return buf;
+    }
+#endif
     /* This replaces HOME_DIR (ie '<HOME'>') with runtime rbhome */
     if (!strncmp(HOME_DIR, dir, HOME_DIR_LEN))
     {
