@@ -76,6 +76,9 @@
 #include "usb.h"
 #include "metadata.h"
 #include "tagcache.h"
+#include "snarty_library.h"
+#include "snarty_added.h"
+#include "timefuncs.h"
 #include "yesno.h"
 #include "core_alloc.h"
 #include "crc32.h"
@@ -224,7 +227,7 @@ static const char * const tags_str[] = { "artist", "album", "genre", "title",
 #else /* strings for logf debugging */
     "tag_virt_basename", "tag_virt_length_min", "tag_virt_length_sec",
     "tag_virt_playtime_min", "tag_virt_playtime_sec",
-    "tag_virt_entryage", "tag_virt_autoscore"
+    "tag_virt_entryage", "tag_virt_autoscore", "tag_virt_artistplays", "tag_virt_ytmadded"
 };
 /* more debug strings */
 static const char * const tag_type_str[] = {
@@ -1267,6 +1270,30 @@ static inline long min_in_ms(long ms)
     return (ms/1000) / 60;
 }
 
+/* Canonical artist is a real string index; aggregate all its track counts. */
+static long artist_playcount(int32_t artist_seek)
+{
+    struct tagcache_search tracks;
+    char filename[MAX_PATH];
+    long total = 0;
+    if (!tagcache_search(&tracks, tag_filename))
+        return 0;
+    if (!tagcache_search_add_filter(&tracks, tag_virt_canonicalartist, artist_seek))
+    {
+        tagcache_search_finish(&tracks);
+        return 0;
+    }
+    while (tagcache_get_next(&tracks, filename, sizeof(filename)))
+    {
+        long plays = tagcache_get_numeric(&tracks, tag_playcount);
+        if (plays > 0)
+            total = plays > LONG_MAX - total ? LONG_MAX : total + plays;
+        yield();
+    }
+    tagcache_search_finish(&tracks);
+    return total;
+}
+
 static long check_virtual_tags(int tag, int idx_id,
                                const struct index_entry *idx)
 {
@@ -1274,6 +1301,11 @@ static long check_virtual_tags(int tag, int idx_id,
 
     switch (tag)
     {
+        case tag_virt_ytmadded:
+            return INT_MAX; /* Rank is context-sensitive in get_numeric. */
+        case tag_virt_artistplays:
+            return artist_playcount(tc_find_tag(tag_virt_canonicalartist, idx_id, idx));
+
         case tag_virt_length_sec:
             data = sec_in_ms(tc_find_tag(tag_length, idx_id, idx));
             break;
@@ -1343,9 +1375,33 @@ long tagcache_get_numeric(const struct tagcache_search *tcs, int tag)
     if (!TAGCACHE_IS_NUMERIC(tag))
         return -1;
 
+    if (tag == tag_virt_ytmadded)
+    {
+        struct tagcache_search file;
+        char path[MAX_PATH];long rank=INT_MAX;
+        if (tagcache_search(&file,tag_filename))
+        {
+            if(tcs->type==tag_album||tcs->type==tag_virt_canonicalartist||tcs->type==tag_artist)
+            {
+                tagcache_search_add_filter(&file,tcs->type,tcs->result_seek);
+                while(tagcache_get_next(&file,path,sizeof(path)))
+                {
+                    long value=snarty_library_rank(path,tcs->type==tag_album);
+                    if(value==INT_MAX)value=snarty_added_rank(path,0);
+                    if(value<rank)rank=value;
+                }
+            }
+            else if (tagcache_retrieve(&file,tcs->idx_id,tag_filename,path,sizeof(path)))
+            {rank=snarty_library_rank(path,false);if(rank==INT_MAX)rank=snarty_added_rank(path,0);}
+            tagcache_search_finish(&file);
+        }
+        return rank;
+    }
+    /* A unique artist search has a tag-file seek, not a master track index. */
+    if (tag == tag_virt_artistplays && tcs->type == tag_virt_canonicalartist)
+        return artist_playcount(tcs->result_seek);
     if (!get_index(tcs->masterfd, tcs->idx_id, &idx, true))
         return -2;
-
     return check_virtual_tags(tag, tcs->idx_id, &idx);
 }
 
@@ -2304,6 +2360,12 @@ static void NO_INLINE add_tagcache(char *path, unsigned long mtime)
     if (filenametag_fd >= 0 && idx_id < 0)
         idx_id = find_entry_disk(path, false);
 
+    /* Preserve dates across tag edits/rescans; seed existing tracks from file dates. */
+#if defined(INNIOASIS_Y1) || (defined(SIMULATOR) && defined(IPOD_6G))
+    uint32_t first_seen=mtime;
+    if(idx_id<0){struct tm now=*get_time();if(valid_time(&now)){time_t epoch=mktime(&now);if(epoch>0&&epoch<INT_MAX)first_seen=epoch;}}
+    snarty_added_observe(path,first_seen);
+#endif
     /* Check if file has been modified. */
     if (idx_id >= 0)
     {

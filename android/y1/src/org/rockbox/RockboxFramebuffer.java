@@ -46,13 +46,37 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-public class RockboxFramebuffer extends SurfaceView 
+public class RockboxFramebuffer extends SurfaceView
                                  implements SurfaceHolder.Callback
 {
     private final DisplayMetrics metrics;
     private final ViewConfiguration view_config;
     private Bitmap btm;
     private final Paint sharpPaint = new Paint();
+    private static volatile RockboxFramebuffer idleSurface;
+    private final SnartyScreensaver saver=new SnartyScreensaver();
+    private int saverWakeKey=-1;
+    private boolean saverTouch;
+    private final Handler saverHandler=new Handler(Looper.getMainLooper());
+    public static boolean handleIdleMediaKey(KeyEvent key){
+        RockboxFramebuffer view=idleSurface;
+        if(view==null||key==null||!view.surfaceReady)return false;
+        int code=key.getKeyCode();
+        if(view.saverWakeKey==code){if(key.getAction()==KeyEvent.ACTION_UP)view.saverWakeKey=-1;return true;}
+        if(view.saver.touch()){
+            if(key.getAction()==KeyEvent.ACTION_DOWN)view.saverWakeKey=code;
+            view.forceFullRedraw();return true;
+        }
+        return false;
+    }
+    private final Runnable saverTick=new Runnable(){public void run(){
+        saver.refresh();
+        if(surfaceReady&&saver.visible()){
+            SurfaceHolder holder=getHolder();Canvas c=holder.lockCanvas();
+            if(c!=null){saver.draw(c);holder.unlockCanvasAndPost(c);}
+        }
+        if(surfaceReady)saverHandler.postDelayed(this,1000);
+    }};
 
     /* surface lifecycle states/objects */
     private final Object surfaceLock = new Object();
@@ -102,7 +126,7 @@ public class RockboxFramebuffer extends SurfaceView
         }
     };
 
-    /* first stage init; needs to run from a thread that has a Looper 
+    /* first stage init; needs to run from a thread that has a Looper
      * setup stuff that needs a Context */
     public RockboxFramebuffer(Context c)
     {
@@ -129,7 +153,7 @@ public class RockboxFramebuffer extends SurfaceView
             }
         }
 
-        SurfaceHolder holder = getHolder();                            
+        SurfaceHolder holder = getHolder();
         Canvas c = holder.lockCanvas();
         if (c == null) {
             Log.w("RockboxFramebuffer", "update: lockCanvas returned null");
@@ -139,14 +163,14 @@ public class RockboxFramebuffer extends SurfaceView
         btm.copyPixelsFromBuffer(framebuffer);
         synchronized (holder)
         { /* draw */
-            c.drawBitmap(btm, 0.0f, 0.0f, null);
+            if(!saver.draw(c))c.drawBitmap(btm, 0.0f, 0.0f, null);
         }
         holder.unlockCanvasAndPost(c);
 
         /* last drawing (used by watchdog) */
         lastUpdateTime = System.currentTimeMillis();
     }
-    
+
     private void update(ByteBuffer framebuffer, Rect dirty)
     {
         /* Check if surface is ready before attempting to draw */
@@ -156,8 +180,8 @@ public class RockboxFramebuffer extends SurfaceView
             }
         }
 
-        SurfaceHolder holder = getHolder();                            
-        Canvas c = holder.lockCanvas(dirty);
+        SurfaceHolder holder = getHolder();
+        Canvas c = saver.visible()?holder.lockCanvas():holder.lockCanvas(dirty);
 
         if (c == null) {
             Log.w("RockboxFramebuffer", "update(dirty): lockCanvas returned null");
@@ -168,7 +192,7 @@ public class RockboxFramebuffer extends SurfaceView
         btm.copyPixelsFromBuffer(framebuffer);
         synchronized (holder)
         {   /* draw */
-            c.drawBitmap(btm, dirty, dirty, null);
+            if(!saver.draw(c))c.drawBitmap(btm, dirty, dirty, null);
         }
         holder.unlockCanvasAndPost(c);
 
@@ -177,7 +201,10 @@ public class RockboxFramebuffer extends SurfaceView
     }
 
     public boolean onTouchEvent(MotionEvent me)
-    {        
+    {
+        if(me.getAction()==MotionEvent.ACTION_DOWN)saverTouch=saver.touch();
+        if(saverTouch){if(me.getAction()==MotionEvent.ACTION_UP||me.getAction()==MotionEvent.ACTION_CANCEL)saverTouch=false;forceFullRedraw();return true;}
+
         int x = (int) me.getX();
         int y = (int) me.getY();
 
@@ -197,15 +224,17 @@ public class RockboxFramebuffer extends SurfaceView
     }
 
     public boolean onKeyDown(final int keyCode, KeyEvent event) {
+        if(saverWakeKey==keyCode)return true;
+        if(saver.touch()){saverWakeKey=keyCode;forceFullRedraw();return true;}
         long currentTime = System.currentTimeMillis();
-        
+
         if (keyCode == CENTER_KEYCODE) {
             if (event.getRepeatCount() == 0) {
                 centerPressStartTime = event.getEventTime();
                 centerIsHeld = false;
                 centerSleepTriggered = false;
                 longPressHandler.postDelayed(centerShutdownRunnable, SHUTDOWN_THRESHOLD_MS);
-                return buttonHandler(keyCode, true);  
+                return buttonHandler(keyCode, true);
             } else {
                 centerIsHeld = true;
                 long elapsed = event.getEventTime() - centerPressStartTime;
@@ -216,12 +245,12 @@ public class RockboxFramebuffer extends SurfaceView
                 return true;
             }
         }
-        
+
         /* Other keys as before */
         if (event.getRepeatCount() > 0) {
             return buttonHandlerRepeat(keyCode);
         } else {
-            if ((keyCode == SCROLL_BACK_KEYCODE || keyCode == SCROLL_FWD_KEYCODE) && 
+            if ((keyCode == SCROLL_BACK_KEYCODE || keyCode == SCROLL_FWD_KEYCODE) &&
                 (currentTime - lastScrollPressTime <= SCROLL_REPEAT_THRESHOLD_MS)){
                 lastScrollPressTime = currentTime;
 
@@ -248,13 +277,15 @@ public class RockboxFramebuffer extends SurfaceView
     }
 
     public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if(saverWakeKey==keyCode){saverWakeKey=-1;return true;}
+        saver.touch();
         long currentTime = System.currentTimeMillis();
         if (keyCode == CENTER_KEYCODE) {
 
             longPressHandler.removeCallbacks(centerShutdownRunnable);
-            
+
             long holdDuration = event.getEventTime() - centerPressStartTime;
-            
+
             if (centerSleepTriggered) {
                 try {
                     powerManager.goToSleep(SystemClock.uptimeMillis());
@@ -277,16 +308,16 @@ public class RockboxFramebuffer extends SurfaceView
             } else {
                 buttonHandler(keyCode, false);
             }
-            
+
             centerPressStartTime = 0;
             centerIsHeld = false;
             centerSleepTriggered = false;
             return true;
         }
-        
+
         /* Other keys */
 
-        if ((keyCode == SCROLL_BACK_KEYCODE || keyCode == SCROLL_FWD_KEYCODE) && 
+        if ((keyCode == SCROLL_BACK_KEYCODE || keyCode == SCROLL_FWD_KEYCODE) &&
             (currentTime - lastScrollPressTime <= SCROLL_REPEAT_THRESHOLD_MS)){
             lastScrollPressTime = currentTime;
             return true;
@@ -297,7 +328,7 @@ public class RockboxFramebuffer extends SurfaceView
             }
             return buttonHandler(keyCode, false);
         }
-    } 
+    }
 
     private int getDpi()
     {
@@ -315,10 +346,10 @@ public class RockboxFramebuffer extends SurfaceView
     public native static void triggerVibrationNative(int baseDuration, int boostDuration);
 
     public native void surfaceCreated(SurfaceHolder holder);
-    
+
     /* Add native method to force a full redraw from native code */
     public native void forceFullRedraw();
-      
+
     /* Add native method to get virtual framebuffer dimensions */
     public native void getVirtualFramebufferDimensions(int[] dimensions);
 
@@ -342,7 +373,7 @@ public class RockboxFramebuffer extends SurfaceView
         } catch (Exception e) {
             android.util.Log.e("RockboxFramebuffer", "Vibration error: " + e.getMessage());
         }
-        
+
     }
     private final Runnable watchdogRunnable = new Runnable() {
         @Override
@@ -371,13 +402,15 @@ public class RockboxFramebuffer extends SurfaceView
             btm.recycle();
         }
         btm = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565);
-        
+
         /* mark surface as ready for drawing */
         synchronized (surfaceLock) {
             surfaceReady = true;
             surfaceEnabled = true;
         }
 
+        idleSurface=this;
+        saverHandler.removeCallbacks(saverTick);saverHandler.post(saverTick);
         /* start watchdog */
         lastUpdateTime = System.currentTimeMillis();
         watchdogHandler.postDelayed(watchdogRunnable, WATCHDOG_TIMEOUT_MS);
@@ -391,6 +424,8 @@ public class RockboxFramebuffer extends SurfaceView
     public void surfaceDestroyed(SurfaceHolder holder) {
         Log.d("RockboxFramebuffer", "surfaceDestroyed");
 
+        if(idleSurface==this)idleSurface=null;
+        saverHandler.removeCallbacks(saverTick);saver.close();
         /* stop watchdog */
         watchdogHandler.removeCallbacks(watchdogRunnable);
 

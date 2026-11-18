@@ -108,6 +108,8 @@ int list_get_nb_lines(struct gui_synclist *list, enum screen_type screen)
     return lines;
 }
 
+#include "snarty_navigation.h"
+#include "snarty_albums.h"
 void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
 {
     struct viewport *vp = list->parent[screen];
@@ -120,6 +122,13 @@ void list_init_item_height(struct gui_synclist *list, enum screen_type screen)
         list->line_height[screen] = line_height + global_settings.list_line_padding;
 #else
     list->line_height[screen] = line_height;
+#endif
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(screen==SCREEN_MAIN){
+        list->line_height[screen]=MAX(list->line_height[screen],LCD_WIDTH*46/480);
+        if(list->selected_size==1){int rows=list_display_title(list,SCREEN_MAIN)?6:5;list->line_height[screen]=MAX(line_height,list->parent[screen]->height/rows);}
+        int cards=snarty_card_row_height(list);if(cards)list->line_height[screen]=cards;
+    }
 #endif
 }
 
@@ -233,6 +242,9 @@ void gui_synclist_draw(struct gui_synclist *gui_list)
             list_init_item_height(gui_list, i);
         gui_synclist_select_item(gui_list, gui_list->selected_item);
     }
+#ifdef HAVE_SNARTY_NAVIGATION
+    snarty_cards_prepare_draw(gui_list);
+#endif
     FOR_NB_SCREENS(i)
     {
         if (!skinlist_draw(&screens[i], gui_list))

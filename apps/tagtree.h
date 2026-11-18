@@ -30,10 +30,21 @@
 #define TAGMENU_MAX_MENUS  32
 #define TAGMENU_MAX_FMTS   32
 
+struct snarty_album_info {int kind;char title[TAG_MAXLEN];char artist[TAG_MAXLEN];char path[MAX_PATH];};
+int tagtree_card_kind(const struct tree_context *c);
+void tagtree_invalidate(void);
+bool tagtree_is_album_view(const struct tree_context *c);
+bool tagtree_is_album_tracks(const struct tree_context *c);
+bool tagtree_album_info(struct tree_context *c,int item,struct snarty_album_info *info);
 int tagtree_export(void);
+int tagtree_browse_media_folder(bool videos);
 int tagtree_import(void);
 void tagtree_init(void) INIT_ATTR;
 bool tagtree_ready(void);
+/* NULL selects the database root; playing-track shortcuts preserve navigation. */
+void tagtree_select_root_entry(const char *name);
+bool tagtree_restore_navigation(struct tree_context *c);
+bool tagtree_is_route_root(const struct tree_context *c);
 int tagtree_enter(struct tree_context* c, bool is_visible);
 void tagtree_exit(struct tree_context* c, bool is_visible);
 int tagtree_load(struct tree_context* c);

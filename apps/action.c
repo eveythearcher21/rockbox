@@ -23,6 +23,9 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "snarty_navigation.h"
+#include "snarty_gesture.h"
+#include "misc.h"
 #include "lang.h"
 
 #if !defined(BOOTLOADER)
@@ -324,7 +327,20 @@ static inline bool action_poll_button(action_last_t *last, action_cur_t *cur)
     bool ret = true;
     int *button = &cur->button;
 
+#ifdef HAVE_SNARTY_NAVIGATION
+    int context=cur->context&0xff;
+    enum current_activity activity=get_current_activity();
+    bool enabled=(context==CONTEXT_WPS||context==CONTEXT_TREE||context==CONTEXT_MAINMENU)&&
+        !(cur->context&CONTEXT_PLUGIN)&&!last->wait_for_release&&
+        (activity==ACTIVITY_WPS||activity==ACTIVITY_MAINMENU||activity==ACTIVITY_FILEBROWSER||activity==ACTIVITY_DATABASEBROWSER||activity==ACTIVITY_PLAYLISTBROWSER||activity==ACTIVITY_PLAYLISTVIEWER);
+#ifndef HAS_BUTTON_HOLD
+    enabled=enabled&&!last->keys_locked;
+#endif
+    *button=snarty_gesture_read(enabled,cur->timeout);
+    if(*button==SNARTY_GESTURE_MATCH){*button=ACTION_SNARTY_FAVORITES;last->context=cur->context;last->button=BUTTON_LEFT|BUTTON_REL;last->action=ACTION_NONE;last->wait_for_release=false;return true;}
+#else
     *button = button_get_w_tmo(cur->timeout);
+#endif
 
    /* ********************************************************
     * Can return button immediately, sys_event & multimedia
@@ -427,7 +443,12 @@ static inline bool get_action_touchscreen(action_last_t *last, action_cur_t *cur
 #else
     if (has_flag(cur->button, BUTTON_TOUCHSCREEN))
     {
-        intptr_t data = button_get_data();
+        intptr_t data =
+#ifdef HAVE_SNARTY_NAVIGATION
+            snarty_gesture_data();
+#else
+            button_get_data();
+#endif
         long now = current_tick;
         last->repeated = false;
 
@@ -998,7 +1019,12 @@ static inline int update_action_last(action_last_t *last, action_cur_t *cur)
 
     last->action = action;
     last->button = cur->button;
-    last->data   = button_get_data();
+    last->data =
+#ifdef HAVE_SNARTY_NAVIGATION
+        snarty_gesture_data();
+#else
+        button_get_data();
+#endif
     last->tick   = current_tick;
 
     /* Produce keyclick */
@@ -1279,7 +1305,9 @@ int get_action(int context, int timeout)
 #endif
 
     action = do_backlight(&action_last, &current, action);
-
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(action==ACTION_STD_MENU)action=ACTION_STD_CANCEL;
+#endif
     return action;
 }
 

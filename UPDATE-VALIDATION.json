@@ -1,0 +1,36 @@
+{
+  "build": "SNARTY-Y1-14",
+  "status": "experimental eight-track/Favorites shuffle update",
+  "sha256": "d399bceec09b082cc408c353cb087d61b2cc08ca7f44817cb1f58fc3e22838a6",
+  "size": 16681372,
+  "native": "PASS target310480x360, clean incremental native build/no new C warnings. Native gesture event filter, data-preserving replay, Favorite queue scan and complete shuffle are linked.",
+  "android": "PASS strict API17 Java/resources, matching platform certificate, API17v1 and fullv1/v2 signatures, zipalign4, ZIP integrity/unique entries,43 native libraries/exact paired theme/fonts and current lyrics plugin;167 packaged plugin binaries have nonempty nonzero headers. Existing JDK obsolete/deprecation notices only.",
+  "gesture_host": "PASS actual raw gesture function under ASan/UBSan with timed queue: RLRL including all four releases, consumed8 events, lone/wrong/held/slow press replay, retained event data, context cancellation, USB priority, nonblocking polling and total-time bound.",
+  "favorites_host": "PASS actual persisted song/album/artist rule/date modules under ASan/UBSan: path aliases, future artist matching, independent removal/reactivation, missing album-artist sentinel fallback, stable first dates and descending chronology.",
+  "retained_tests": "PASS actual full-queue shuffle regression over1..26 entries/all origins/20seeds; sort preference persistence/malformed defaults; bounded root lookup. Other revision13 features are retained, not all re-exercised in this turn.",
+  "simulator": {
+    "passed": [
+      "Empty Favorites gesture stays Home and preserves the queue",
+      "Compact album header and full-width eight-row track pane captured",
+      "WPS RLRL creates a complete unique eight-song Favorites queue, shuffles it and persists origin zero",
+      "The same shortcut works in the album browser and enters playback"
+    ],
+    "queue": "P:6::\nA:0:0:/Music/extra08.flac\nA:1:1:/Music/extra07.flac\nA:2:2:/Music/extra06.flac\nA:3:3:/Music/extra05.flac\nA:4:4:/Music/extra04.flac\nA:5:5:/Music/extra03.flac\nA:6:6:/Music/02.flac\nA:7:7:/Music/01.flac\nS:3220:0\n",
+    "expected": [
+      "/Music/01.flac",
+      "/Music/02.flac",
+      "/Music/extra03.flac",
+      "/Music/extra04.flac",
+      "/Music/extra05.flac",
+      "/Music/extra06.flac",
+      "/Music/extra07.flac",
+      "/Music/extra08.flac"
+    ],
+    "evidence": "/tmp/snarty-navigation-jn21a7k6"
+  },
+  "behavior": "Eight full-width album track rows below compact64px cover/header; song playback art position unchanged. RLRL in native Home/Music browsers, playlist viewer and WPS prepares all matching playable favorites before replacing dynamic queue, shuffles origin0, starts at0. Empty/cancelled/unavailable/oversized preparation preserves old queue. Party Mode blocks replacement. Saved playlist files/rules unchanged. Back history from playback preserved.",
+  "limits": "One Right may wait350ms while a gesture is distinguished. Each new direction must begin within350ms; all releases within1.2sec total. Not active while locked/asleep, Android video, external Android screens or plugin/text entry. Low-level card failure during final queue writes remains reportable and cannot guarantee rollback. Actual Y1 timing/standby/video acceptance pending.",
+  "preview_provenance": "Actual shared320x240 simulator,14 synthetic tracks/7 albums, an eight-track favorited album, synthetic artwork. Images are not physical480x360 device photos. Eight real tracks are visibly present; no dummy rows.",
+  "physical_y1": "PENDING owner acceptance for installation, real eight-row typography/buttons, gesture timing, key-lock/idle wake, favorite future sync additions, playlist capacity/card failures and retained video/standby. No attached Y1 or emulator/provider account used.",
+  "update": "All13 features bundled and persistent stores retained. Update-install matching certificate; no uninstall/ROM/system-keylayout writes; revision12 paired-asset migration policy retained; no additional theme reset."
+}
