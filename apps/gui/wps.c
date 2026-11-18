@@ -724,6 +724,10 @@ long gui_wps_show(void)
 #endif
     long button = 0;
     bool restore = true;
+#ifdef INNIOASIS_Y1
+    bool browse_click_pending = false;
+    long browse_click_deadline = 0;
+#endif
     bool exit = false;
     bool bookmark = false;
     bool update = false;
@@ -807,6 +811,30 @@ long gui_wps_show(void)
         if (button == ACTION_TOUCHSCREEN)
             button = skintouch_to_wps();
 #endif
+#ifdef INNIOASIS_Y1
+        /* Delay a single center click briefly so a second opens the track menu. */
+        if (button == ACTION_WPS_BROWSE)
+        {
+            if (browse_click_pending && TIME_BEFORE(current_tick, browse_click_deadline))
+            {
+                browse_click_pending = false;
+                button = ACTION_WPS_CONTEXT;
+            }
+            else
+            {
+                browse_click_pending = true;
+                browse_click_deadline = current_tick + 2 * HZ / 5;
+                button = ACTION_NONE;
+            }
+        }
+        else if (button != ACTION_NONE)
+            browse_click_pending = false;
+        if (browse_click_pending && !TIME_BEFORE(current_tick, browse_click_deadline))
+        {
+            browse_click_pending = false;
+            button = ACTION_WPS_BROWSE;
+        }
+#endif
         button = do_party_mode(button); /* block select actions in party mode */
 
         button = action_wpsab_single(button); /* iPods/X5/M5 */
@@ -848,8 +876,14 @@ long gui_wps_show(void)
                 if (retval == ONPLAY_MAINMENU
                     || !audio_status())
                     return GO_TO_ROOT;
+#ifdef HAVE_TAGCACHE
+                else if (retval == ONPLAY_DATABASE)
+                    return GO_TO_DBBROWSER;
+#endif
                 else if (retval == ONPLAY_REVEAL_FILE)
                     return GO_TO_FILEBROWSER;
+                else if (retval == ONPLAY_SYSTEM)
+                    return GO_TO_SYSTEM_SCREEN;
                 else if (retval == ONPLAY_PLAYLIST)
                     return GO_TO_PLAYLIST_VIEWER;
                 else if (retval == ONPLAY_PLUGIN)

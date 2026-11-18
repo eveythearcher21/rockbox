@@ -1,0 +1,21 @@
+{
+  "build": "SNARTY-Y1-10",
+  "status": "experimental layout test",
+  "sha256": "210a651c03f623118ff642bcd326b57ffefa723272760fc0736e9b56adba70f8",
+  "size": 16664988,
+  "native_build": "PASS target310 480x360, no new C warnings",
+  "java_resources": "PASS strict API17 platform compilation",
+  "signatures_alignment": "PASS API17 v1 and full signatures, matching recovery/revision9 certificate, zipalign4 and ZIP integrity",
+  "bundled_theme_files": 32,
+  "theme_payload": "PASS every bundled SNARTY font/skin/icon/library override matches corresponding source bytes",
+  "native_library_count": 43,
+  "root_lookup_test": "PASS actual get_selection under ASan/UBSan: configured count bounds, sparse/null slots, absent legacy route. A real simulator SIGSEGV trace identified the prior empty-entry dereference.",
+  "font_test": "PASS actual label renderer under ASan/UBSan: resolved font ID, pinning across cache I/O, all exits balanced, mono/alpha clipping over scale sizes",
+  "retained_tests": "PASS production shuffle regression, storage automatic retries, one-time settings migration, video policy/timeline and decoder-worker stalled-open test",
+  "simulator_navigation": "PASS actual route assertions across the full Music/media run and affected Settings subset: Home four entries; all nine Music entries; playing Alpha Song; Back without extra Database layer; Videos/Podcasts direct open/Back; retained sound controls; System information; Files open/Back; Additional Features. Music/media evidence /tmp/snarty-navigation-arczfpny; final System/Files subset PASS /tmp/snarty-navigation-ofdfsm76.",
+  "animation": "PASS 6 distinct real SDL frames from a single key press; /tmp/snarty-navigation-2q9j000e",
+  "scope": "Animation on Home, Music, Settings and Additional Features; detailed lists retain existing controls. Underlying music index is retained. Physical iPods unchanged.",
+  "physical_y1": "PENDING owner acceptance: actual 480x360 layout, fast wheel input, animation timing, FM Android app, video, sleep/wake and reboot reliability. No attached Y1 or Android emulator available.",
+  "extras_routes": "PASS actual Shortcuts empty return and Plugins Games/Applications/Demos open/Back, /tmp/snarty-navigation-pzibxf82",
+  "ocr_scope": "Native bitmap fonts have known OCR substitutions (Albums/Albuns, 2025/2825, Rockbox/Rockbor). Affected assertions use unambiguous menu labels; final Settings subset passed. These were OCR mismatches with the process alive, separate from the traced/fixed root lookup crash."
+}
