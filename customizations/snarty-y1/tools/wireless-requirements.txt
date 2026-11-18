@@ -1,0 +1,6 @@
+# Desktop Python 3.11+; FFmpeg must also be installed on PATH.
+ytmusicapi==1.12.4
+yt-dlp[default]==2026.10.26
+mutagen==1.48.1
+Pillow==13.0.0
+requests>=2.32.4,<3

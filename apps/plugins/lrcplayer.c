@@ -25,7 +25,7 @@
 
 
 
-#define MAX_LINE_LEN    256
+#define MAX_LINE_LEN    512
 #define LRC_BUFFER_SIZE 0x3000 /* 12 kiB */
 #if PLUGIN_BUFFER_SIZE >= 0x10000 /* no id3 support for low mem targets */
 /* define this to read lyrics in id3 tag */
@@ -34,6 +34,8 @@
 /* define this to show debug info in menu */
 /* #define LRC_DEBUG */
 
+static bool snarty_mode, snarty_word_timing, snarty_preview;
+static struct mp3entry preview_track;
 enum lrc_screen {
     PLUGIN_OTHER = 0x200,
     LRC_GOTO_MAIN,
@@ -288,6 +290,7 @@ static void reset_current_data(void)
     current.ll_head = NULL;
     current.ll_tail = &current.ll_head;
     current.loaded_lrc = false;
+    snarty_word_timing=false;
     current.changed_lrc = false;
     current.too_many_lines = false;
     lrc_buffer_used = 0;
@@ -868,6 +871,7 @@ static bool parse_lrc_line(char *line, off_t file_offset)
         }
         *tagstart = 0;
         /* found word time tag. */
+        snarty_word_timing=true;
         if (*str || time_start != -1)
         {
             if ((lrc_word = new_lrc_word(time_start, str, true)) == NULL)
@@ -1523,6 +1527,8 @@ static void display_state(void)
 
     if (AUDIO_STOP)
         str = "Audio Stopped";
+    else if(snarty_mode && !current.found_lrc)
+        str="No synced lyrics. Sync this song first.";
     else if (current.found_lrc)
     {
         if (!current.loaded_lrc)
@@ -1583,6 +1589,9 @@ static void display_time(void)
     rb->snprintf(temp_buf, MAX_LINE_LEN, "%ld:%02ld/%ld:%02ld",
                             current.elapsed/60000, (current.elapsed/1000)%60,
                             current.length/60000, (current.length)/1000%60);
+    if(snarty_preview)rb->strlcpy(temp_buf,"Preview - scroll with wheel",MAX_LINE_LEN);
+    if(snarty_mode&&!snarty_preview)
+        rb->snprintf(temp_buf+rb->strlen(temp_buf),MAX_LINE_LEN-rb->strlen(temp_buf),"  %s",!current.loaded_lrc?"Missing":snarty_word_timing?"Words":(current.type==TXT||current.type==ID3_USLT)?"Text":"Lines");
     int y = (prefs.display_title? font_ui_height:0);
     FOR_NB_SCREENS(i)
     {
@@ -2530,6 +2539,7 @@ static int lrc_menu(void)
 static bool check_audio_status(void)
 {
     static int last_audio_status = 0;
+    if(snarty_preview){current.id3=&preview_track;current.audio_status=AUDIO_STATUS_PLAY;return rb->strcmp(current.mp3_file,preview_track.path)!=0;}
     if (current.ff_rewind == -1)
         current.audio_status = rb->audio_status();
     current.id3 = rb->audio_current_track();
@@ -2557,6 +2567,10 @@ static int handle_button(void)
     int ret = LRC_GOTO_MAIN;
     static int step = 0;
     int limit, button = rb->get_action(CONTEXT_WPS, HZ/10);
+    if(snarty_preview&&button!=ACTION_WPS_BROWSE&&button!=ACTION_WPS_STOP&&button!=ACTION_WPS_MENU&&button!=ACTION_WPS_QUICKSCREEN&&button!=ACTION_WPS_VOLUP&&button!=ACTION_WPS_VOLDOWN){
+        if(rb->default_event_handler(button)==SYS_USB_CONNECTED)return PLUGIN_USB_CONNECTED;
+        return LRC_GOTO_MAIN;
+    }
     switch (button)
     {
         case ACTION_WPS_BROWSE:
@@ -2666,7 +2680,10 @@ static int handle_button(void)
             ret = LRC_GOTO_EDITOR;
             break;
         case ACTION_WPS_MENU:
-            ret = LRC_GOTO_MENU;
+            ret = snarty_mode?PLUGIN_OK:LRC_GOTO_MENU;
+            break;
+        case ACTION_WPS_QUICKSCREEN:
+            if(snarty_mode)ret=PLUGIN_OK; /* A held Back also closes the lyric sheet. */
             break;
         default:
             if(rb->default_event_handler(button) == SYS_USB_CONNECTED)
@@ -2728,7 +2745,8 @@ static int lrc_main(void)
         }
         if (current.id3 && current.id3->length)
         {
-            if (current.ff_rewind == -1)
+            if(snarty_preview)current.elapsed=0;
+            else if (current.ff_rewind == -1)
             {
                 long di = current.id3->elapsed - current.elapsed;
                 if (di < -250 || di > 0)
@@ -2772,10 +2790,11 @@ static int lrc_main(void)
         }
         if (update_display_state)
         {
+            if(snarty_mode)prefs.autoscroll=!snarty_preview&&(current.type!=TXT && current.type!=ID3_USLT);
             if (current.type == TXT || current.type == ID3_USLT)
                 current.wipe = false;
             else
-                current.wipe = prefs.wipe;
+                current.wipe = !snarty_preview && prefs.wipe && (!snarty_mode || snarty_word_timing);
             display_state();
             update_display_state = false;
         }
@@ -2806,8 +2825,24 @@ enum plugin_status plugin_start(const void* parameter)
 {
     int ret = LRC_GOTO_MAIN;
 
+    snarty_preview=parameter&&!rb->strncmp(parameter,"snarty:preview:",15);
+    snarty_mode=snarty_preview||(parameter&&!rb->strcmp(parameter,"snarty:lyrics"));
+    if(snarty_preview){
+        if(!rb->get_metadata(&preview_track,-1,(const char*)parameter+15)){rb->splash(HZ*2,"Cannot read selected song");return PLUGIN_ERROR;}
+        preview_track.elapsed=0;
+    }
+    if(snarty_mode)parameter=NULL;
     /* initialize settings. */
     load_or_save_settings(false);
+    if(snarty_mode)
+    {
+#if LCD_DEPTH > 1
+        prefs.active_color=LCD_RGBPACK(165,230,186);
+        prefs.inactive_color=LCD_RGBPACK(162,172,205);
+#endif
+        prefs.wipe=true;prefs.active_one_line=true;prefs.autoscroll=true;
+        prefs.align=1;prefs.backlight_on=true;
+    }
 
     uifont = rb->screens[0]->getuifont();
     font_ui_height = rb->font_get(uifont)->height;
@@ -2868,6 +2903,6 @@ enum plugin_status plugin_start(const void* parameter)
         }
     }
 
-    load_or_save_settings(true);
+    if(!snarty_mode)load_or_save_settings(true);
     return ret;
 }

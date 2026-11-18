@@ -37,6 +37,9 @@
 #include "power.h"
 #include "talk.h"
 #include "audio.h"
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
+#include "button.h"
+#endif
 #include "shortcuts.h"
 
 #ifdef HAVE_HOTSWAP
@@ -51,6 +54,12 @@
 #include "viewport.h"
 
 #include "tree.h"
+#include "snarty_navigation.h"
+#ifdef INNIOASIS_Y1
+#include "wireless-android.h"
+#include "keyboard.h"
+#endif
+#include "listening_history.h"
 #if CONFIG_TUNER
 #include "radio.h"
 #endif
@@ -301,6 +310,10 @@ static int browser(void* param)
     };
 
     ret_val = rockbox_browse(&browse);
+#ifdef HAVE_TAGCACHE
+    if ((intptr_t)param == GO_TO_DBBROWSER)
+        tagtree_restore_navigation(tc); /* Home/WPS exits must not save shortcut state. */
+#endif
 
     if (ret_val == GO_TO_WPS
         || ret_val == GO_TO_PREVIOUS_MUSIC
@@ -417,6 +430,12 @@ static int miscscrn(void * param)
     switch (result)
     {
         case GO_TO_PLUGIN:
+        case GO_TO_FILEBROWSER:
+        case GO_TO_SHORTCUTMENU:
+        case GO_TO_BROWSEPLUGINS:
+#ifdef INNIOASIS_Y1
+        case GO_TO_FM_RADIO_APP:
+#endif
         case GO_TO_PLAYLIST_VIEWER:
         case GO_TO_WPS:
         case GO_TO_PREVIOUS_MUSIC:
@@ -483,14 +502,57 @@ extern struct menu_item_ex
 #ifdef INNIOASIS_Y1
 extern struct menu_item_ex fm_radio_app_item;
 #endif
+#ifdef HAVE_TAGCACHE
+static int library_browser(void *entry)
+{
+    tagtree_select_root_entry(entry);
+    return browser((void *)GO_TO_DBBROWSER);
+}
+#endif
+
+#ifdef HAVE_TAGCACHE
+static int media_folder_browser(void *videos)
+{
+    int result = tagtree_browse_media_folder((intptr_t)videos != 0);
+    return result == GO_TO_WPS ? result : GO_TO_ROOT;
+}
+static int wrapped_browser(void *ignored)
+{
+    (void)ignored;listening_history_show();return GO_TO_ROOT;
+}
+#endif
+#ifdef HAVE_SNARTY_NAVIGATION
+static int snarty_page;
+static int snarty_selection[4];
+void snarty_navigation_home(void) { snarty_page = 0; }
+static int snarty_settings_screen(void *ignored)
+{
+    (void)ignored;snarty_page = 2;return GO_TO_ROOT;
+}
+static int snarty_mainmenu(void);
+#endif
+
 static const struct root_items items[] = {
     [GO_TO_FILEBROWSER] =   { browser, (void*)GO_TO_FILEBROWSER, &file_menu},
 #ifdef HAVE_TAGCACHE
     [GO_TO_DBBROWSER] =     { browser, (void*)GO_TO_DBBROWSER, &tagcache_menu },
+    [GO_TO_LIBRARY_ALBUMS] = { library_browser, "Albums", &tagcache_menu },
+    [GO_TO_VIDEOS_SCREEN] = { media_folder_browser, (void*)1, NULL },
+    [GO_TO_PODCASTS_SCREEN] = { media_folder_browser, NULL, NULL },
+    [GO_TO_WRAPPED_SCREEN] = { wrapped_browser, NULL, NULL },
+    [GO_TO_FAVORITES_SCREEN] = { library_browser, "Favorites", &tagcache_menu },
+    [GO_TO_LIBRARY_SONGS] = { library_browser, "Songs", &tagcache_menu },
+    [GO_TO_LIBRARY_ARTISTS] = { library_browser, "Artists", &tagcache_menu },
+    [GO_TO_LIBRARY_GENRE] = { library_browser, "Genre", &tagcache_menu },
+    [GO_TO_LIBRARY_YEAR] = { library_browser, "Year", &tagcache_menu },
+    [GO_TO_LIBRARY_SEARCH] = { library_browser, "Search", &tagcache_menu },
 #endif
     [GO_TO_WPS] =           { wpsscrn, NULL, &playback_settings },
-    [GO_TO_MAINMENU] =      { miscscrn, (struct menu_item_ex*)&main_menu_,
-                                                            &manage_settings },
+#ifdef HAVE_SNARTY_NAVIGATION
+    [GO_TO_MAINMENU] =      { snarty_settings_screen, NULL, &manage_settings },
+#else
+    [GO_TO_MAINMENU] =      { miscscrn, (struct menu_item_ex*)&main_menu_, &manage_settings },
+#endif
 
 #ifdef HAVE_RECORDING
     [GO_TO_RECSCREEN] =     {  recscrn, NULL, &recording_settings_menu },
@@ -526,6 +588,11 @@ MENUITEM_RETURNVALUE(file_browser, ID2P(LANG_DIR_BROWSER), GO_TO_FILEBROWSER,
 #ifdef HAVE_TAGCACHE
 MENUITEM_RETURNVALUE(db_browser, ID2P(LANG_TAGCACHE), GO_TO_DBBROWSER,
                         NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_songs, "Songs", GO_TO_LIBRARY_SONGS, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_artists, "Artists", GO_TO_LIBRARY_ARTISTS, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_genre, "Genre", GO_TO_LIBRARY_GENRE, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_year, "Year", GO_TO_LIBRARY_YEAR, NULL, Icon_Audio);
+MENUITEM_RETURNVALUE(library_search, "Search", GO_TO_LIBRARY_SEARCH, NULL, Icon_Questionmark);
 #endif
 MENUITEM_RETURNVALUE(rocks_browser, ID2P(LANG_PLUGINS), GO_TO_BROWSEPLUGINS,
                         NULL, Icon_Plugin);
@@ -568,6 +635,11 @@ static struct menu_table menu_table[] = {
     { "files", &file_browser },
 #ifdef HAVE_TAGCACHE
     { "database", &db_browser },
+    { "songs", &library_songs },
+    { "artists", &library_artists },
+    { "genre", &library_genre },
+    { "year", &library_year },
+    { "search", &library_search },
 #endif
     { "wps", &wps_item },
     { "settings", &menu_ },
@@ -668,11 +740,21 @@ void root_menu_set_default(void* setting, void* defaultval)
     root_menu_.submenus = (const struct menu_item_ex **)&root_menu__;
     root_menu_.callback_and_desc = &root_menu_desc;
 
+    unsigned count = 0;
     for (i=0; i<MAX_MENU_ITEMS; i++)
     {
-        root_menu__[i] = (struct menu_item_ex *)menu_table[i].item;
+#ifdef HAVE_TAGCACHE
+        /* Library shortcuts are opt-in through root menu order. */
+        if (menu_table[i].item == &library_songs ||
+            menu_table[i].item == &library_artists ||
+            menu_table[i].item == &library_genre ||
+            menu_table[i].item == &library_year ||
+            menu_table[i].item == &library_search)
+            continue;
+#endif
+        root_menu__[count++] = (struct menu_item_ex *)menu_table[i].item;
     }
-    root_menu_.flags |= MENU_ITEM_COUNT(MAX_MENU_ITEMS);
+    root_menu_.flags |= MENU_ITEM_COUNT(count);
     *(bool*)setting = false;
 }
 
@@ -713,10 +795,11 @@ static int item_callback(int action,
 static int get_selection(int last_screen)
 {
     int i;
-    int len = ARRAYLEN(root_menu__);
+    int len = MIN((int)MENU_GET_COUNT(root_menu_.flags), (int)ARRAYLEN(root_menu__));
     for(i=0; i < len; i++)
     {
-        if (((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
+        if (root_menu__[i] &&
+            ((root_menu__[i]->flags&MENU_TYPE_MASK) == MT_RETURN_VALUE) &&
             (root_menu__[i]->value == last_screen))
         {
             return i;
@@ -863,7 +946,7 @@ static int load_plugin_screen(char *key)
 
 static void ignore_back_button_stub(bool ignore)
 {
-#if (defined(PLATFORM_ANDROID) || defined(INNIOASIS_Y1))
+#if (CONFIG_PLATFORM & PLATFORM_ANDROID)
     /* BACK button to be handled by Android instead of rockbox */
     android_ignore_back_button(ignore);
 #else
@@ -956,6 +1039,214 @@ static int root_menu_setup_screens(void)
 }
 
 
+#ifdef HAVE_SNARTY_NAVIGATION
+/* Negative routes are local folders or detailed settings, never playlist IDs. */
+enum { NAV_MUSIC=-100, NAV_SETTINGS, NAV_EXTRAS, NAV_WIFI, NAV_SYNC, NAV_DETAIL_BASE=1000 };
+static const struct snarty_nav_item nav_home[] = {
+    {"Music", SN_ICON_MUSIC, NAV_MUSIC},
+    {"Videos", SN_ICON_VIDEOS, GO_TO_VIDEOS_SCREEN},
+    {"Podcasts", SN_ICON_PODCASTS, GO_TO_PODCASTS_SCREEN},
+    {"Settings", SN_ICON_SETTINGS, NAV_SETTINGS},
+};
+static const struct snarty_nav_item nav_music[] = {
+    {"Songs", SN_ICON_SONGS, GO_TO_LIBRARY_SONGS},
+    {"Albums", SN_ICON_ALBUMS, GO_TO_LIBRARY_ALBUMS},
+    {"Artists", SN_ICON_ARTISTS, GO_TO_LIBRARY_ARTISTS},
+    {"Playlists", SN_ICON_PLAYLISTS, GO_TO_PLAYLISTS_SCREEN},
+    {"Currently Playing", SN_ICON_PLAYING, GO_TO_WPS},
+    {"Favorites", SN_ICON_FAVORITE, GO_TO_FAVORITES_SCREEN},
+    {"Genre", SN_ICON_GENRE, GO_TO_LIBRARY_GENRE},
+    {"Year", SN_ICON_YEAR, GO_TO_LIBRARY_YEAR},
+    {"Search", SN_ICON_SEARCH, GO_TO_LIBRARY_SEARCH},
+    {"Spotify Wrapped", SN_ICON_WRAPPED, GO_TO_WRAPPED_SCREEN},
+    {"Sync Library", SN_ICON_SYNC, NAV_SYNC},
+};
+extern struct menu_item_ex manage_settings;
+#if CONFIG_RTC
+extern struct menu_item_ex timedate_item;
+#endif
+#ifdef INNIOASIS_Y1
+extern struct menu_item_ex bluetooth_menu, system_menu_item;
+#endif
+static const struct menu_item_ex * const nav_detail[] = {
+    &sound_settings, &playback_settings, &settings_menu_item, &theme_menu,
+    &manage_settings,
+#if CONFIG_RTC
+    &timedate_item,
+#endif
+#ifdef INNIOASIS_Y1
+    &bluetooth_menu, &system_menu_item,
+#endif
+#ifdef HAVE_RECORDING
+    &recording_settings,
+#endif
+};
+static const struct snarty_nav_item nav_settings[] = {
+    {"Sound Settings", SN_ICON_SETTINGS, NAV_DETAIL_BASE},
+    {"Playback Settings", SN_ICON_PLAYING, NAV_DETAIL_BASE+1},
+    {"General Settings", SN_ICON_SETTINGS, NAV_DETAIL_BASE+2},
+    {"Theme Settings", SN_ICON_SETTINGS, NAV_DETAIL_BASE+3},
+    {"Manage Settings", SN_ICON_SETTINGS, NAV_DETAIL_BASE+4},
+#if CONFIG_RTC
+    {"Time and Date", SN_ICON_YEAR, NAV_DETAIL_BASE+5},
+#endif
+#ifdef INNIOASIS_Y1
+    {"Bluetooth", SN_ICON_RADIO, NAV_DETAIL_BASE+6},
+    {"Android Settings", SN_ICON_SYSTEM, NAV_DETAIL_BASE+7},
+#endif
+    {"Wi-Fi", SN_ICON_WIFI, NAV_WIFI},
+#ifdef HAVE_RECORDING
+    {"Recording Settings", SN_ICON_PODCASTS, NAV_DETAIL_BASE+ARRAYLEN(nav_detail)-1},
+#endif
+    {"System", SN_ICON_SYSTEM, GO_TO_SYSTEM_SCREEN},
+    {"Files", SN_ICON_FILES, GO_TO_FILEBROWSER},
+    {"Additional Features", SN_ICON_EXTRAS, NAV_EXTRAS},
+};
+static const struct snarty_nav_item nav_extras[] = {
+#ifdef INNIOASIS_Y1
+    {"FM Radio", SN_ICON_RADIO, GO_TO_FM_RADIO_APP},
+#elif CONFIG_TUNER
+    {"FM Radio", SN_ICON_RADIO, GO_TO_FM},
+#endif
+    {"Shortcuts", SN_ICON_SHORTCUTS, GO_TO_SHORTCUTMENU},
+    {"Plugins", SN_ICON_PLUGINS, GO_TO_BROWSEPLUGINS},
+};
+#ifdef INNIOASIS_Y1
+static void wireless_message(int command,const char *input)
+{
+    char message[512];
+    if(!android_wireless(command,input,message,sizeof(message)))
+        strlcpy(message,"Wireless service unavailable",sizeof(message));
+    splash(HZ*3,message);
+}
+static void wireless_connect(const char *name)
+{
+    char ssid[129]="",password[65]="",input[200];
+    if(name)strlcpy(ssid,name,sizeof(ssid));
+    else {splash(HZ,"Enter network name");if(kbd_input(ssid,sizeof(ssid),NULL)<0)return;}
+    splash(HZ*2,"Enter WPA2 password (blank for saved/open network)");
+    if(kbd_input(password,sizeof(password),NULL)<0)return;
+    snprintf(input,sizeof(input),"%s\t%s",ssid,password);
+    wireless_message(6,input);
+    memset(password,0,sizeof(password));memset(input,0,sizeof(input));
+}
+static int wireless_menu(bool sync)
+{
+    int selected=0;
+    while(true)
+    {
+        char status[512],auto_status[180];
+        android_wireless(sync?1:0,NULL,status,sizeof(status));
+        android_wireless(10,NULL,auto_status,sizeof(auto_status));
+        struct snarty_nav_item wifi_items[]={
+            {status,SN_ICON_WIFI,0},
+            {"Enable Wi-Fi",SN_ICON_WIFI,2},
+            {"Scan Networks",SN_ICON_SEARCH,4},
+            {"Available Networks",SN_ICON_WIFI,5},
+            {"Connect by Network Name",SN_ICON_WIFI,6},
+            {"Disable Wi-Fi",SN_ICON_WIFI,3},
+            {"Syncer Pairing / Library",SN_ICON_SYNC,100},
+        };
+        struct snarty_nav_item sync_items[]={
+            {status,SN_ICON_SYNC,1},
+            {"Sync Now",SN_ICON_SYNC,7},
+            {auto_status,SN_ICON_SETTINGS,8},
+            {"Import Syncer Pairing",SN_ICON_FILES,12},
+            {"Enter Syncer Address / Key",SN_ICON_SETTINGS,9},
+            {"Refresh Music Database",SN_ICON_ALBUMS,101},
+        };
+        struct snarty_nav_item *items=sync?sync_items:wifi_items;
+        int choice=snarty_nav_choose(sync?"Sync Library":"Wi-Fi",items,
+            sync?ARRAYLEN(sync_items):ARRAYLEN(wifi_items),&selected);
+        if(choice==SN_NAV_USB)return MENU_ATTACHED_USB;
+        if(choice==SN_NAV_WPS)return GO_TO_WPS;
+        if(choice<0)return GO_TO_ROOT;
+        int command=items[choice].route;
+        if(command==100){int result=wireless_menu(true);if(result!=GO_TO_ROOT)return result;}
+        else if(command==101){tagcache_update();tagtree_invalidate();splash(HZ,"Database update requested");}
+        else if(command==6)wireless_connect(NULL);
+        else if(command==5)
+        {
+            static char names[4096];static struct snarty_nav_item networks[32];int count=0,pick=0;
+            android_wireless(5,NULL,names,sizeof(names));char *start=names;
+            while(*start && count<32)
+            {
+                char *end=strchr(start,'\n');if(!end)break;*end=0;
+                networks[count++]=(struct snarty_nav_item){start,SN_ICON_WIFI,0};start=end+1;
+            }
+            if(!count)splash(HZ*2,"No scan results. Enable Wi-Fi, scan, then retry.");
+            else
+            {
+                int network=snarty_nav_choose("Available Networks",networks,count,&pick);
+                if(network==SN_NAV_USB)return MENU_ATTACHED_USB;
+                if(network==SN_NAV_WPS)return GO_TO_WPS;
+                if(network>=0)wireless_connect(networks[network].label);
+            }
+        }
+        else if(command==9)
+        {
+            char url[128]="http://",key[65]="",input[200];
+            splash(HZ*2,"Enter Syncer's http://local-IP:8787 address");
+            if(kbd_input(url,sizeof(url),NULL)<0)continue;
+            splash(HZ*2,"Enter 64-character Syncer pairing key");
+            if(kbd_input(key,sizeof(key),NULL)<0)continue;
+            snprintf(input,sizeof(input),"%s\t%s",url,key);wireless_message(9,input);
+            memset(key,0,sizeof(key));memset(input,0,sizeof(input));
+        }
+        else wireless_message(command,NULL);
+    }
+}
+#endif
+static int snarty_mainmenu(void)
+{
+    while (true)
+    {
+#ifdef INNIOASIS_Y1
+        char change[16];
+        if(tagcache_is_usable() && android_wireless(11,NULL,change,sizeof(change)) && !strcmp(change,"changed"))
+        {tagcache_update();tagtree_invalidate();}
+#endif
+        const struct snarty_nav_item *entries;
+        const char *title;int count;
+        switch (snarty_page)
+        {
+            default: snarty_page=0; /* fall through */
+            case 0: entries=nav_home;count=ARRAYLEN(nav_home);title="Home";break;
+            case 1: entries=nav_music;count=ARRAYLEN(nav_music);title="Music";break;
+            case 2: entries=nav_settings;count=ARRAYLEN(nav_settings);title="Settings";break;
+            case 3: entries=nav_extras;count=ARRAYLEN(nav_extras);title="Additional Features";break;
+        }
+        int selected=snarty_nav_choose(title,entries,count,&snarty_selection[snarty_page]);
+        if (selected==SN_NAV_USB) return MENU_ATTACHED_USB;
+        if (selected==SN_NAV_HOME) {snarty_page=0;continue;}
+        if (selected==SN_NAV_BACK) {snarty_page=snarty_page==3?2:0;continue;}
+        if (selected==SN_NAV_WPS) return GO_TO_WPS;
+        int route=entries[selected].route;
+        if (route==NAV_MUSIC) {snarty_page=1;continue;}
+        if (route==NAV_SETTINGS) {snarty_page=2;continue;}
+        if (route==NAV_EXTRAS) {snarty_page=3;continue;}
+        if(route==NAV_WIFI || route==NAV_SYNC)
+        {
+#ifdef INNIOASIS_Y1
+            if(route==NAV_SYNC)wireless_message(7,NULL);
+            int result=wireless_menu(route==NAV_SYNC);
+            if(result!=GO_TO_ROOT)return result;
+#else
+            splash(HZ*2,"Wireless sync is available on the Y1 Android build");
+#endif
+            continue;
+        }
+        if (route>=NAV_DETAIL_BASE)
+        {
+            int result=miscscrn((void*)nav_detail[route-NAV_DETAIL_BASE]);
+            if (result!=GO_TO_ROOT && result!=GO_TO_PREVIOUS) return result;
+            continue;
+        }
+        return route;
+    }
+}
+#endif
+
 void root_menu(void)
 {
     int previous_browser = global_status.last_browser;
@@ -964,6 +1255,10 @@ void root_menu(void)
 
     push_current_activity(ACTIVITY_MAINMENU);
     next_screen = root_menu_setup_screens();
+#ifdef HAVE_SNARTY_NAVIGATION
+    next_screen = GO_TO_ROOT; /* This launcher opens on Home, including upgrades. */
+    snarty_navigation_home();
+#endif
 
     while (true)
     {
@@ -980,7 +1275,15 @@ void root_menu(void)
                  * button to be handled by HOST instead of rockbox */
                 ignore_back_button_stub(true);
 
+#ifdef HAVE_SNARTY_NAVIGATION
+                next_screen = snarty_mainmenu();
+#else
                 next_screen = do_menu(&root_menu_, &selected, NULL, false);
+#endif
+#ifdef HAVE_TAGCACHE
+                if (next_screen == GO_TO_DBBROWSER)
+                    tagtree_select_root_entry(NULL);
+#endif
 
                 ignore_back_button_stub(false);
 
@@ -989,6 +1292,15 @@ void root_menu(void)
                 break;
 #ifdef HAVE_TAGCACHE
             case GO_TO_DBBROWSER:
+            case GO_TO_FAVORITES_SCREEN:
+            case GO_TO_LIBRARY_SONGS:
+            case GO_TO_LIBRARY_ALBUMS:
+            case GO_TO_LIBRARY_ARTISTS:
+            case GO_TO_LIBRARY_GENRE:
+            case GO_TO_LIBRARY_YEAR:
+            case GO_TO_LIBRARY_SEARCH:
+            case GO_TO_VIDEOS_SCREEN:
+            case GO_TO_PODCASTS_SCREEN:
 #endif
             case GO_TO_FILEBROWSER:
             case GO_TO_PLAYLISTS_SCREEN:

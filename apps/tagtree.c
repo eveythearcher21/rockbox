@@ -38,6 +38,8 @@
 #include "settings.h"
 #include "tagcache.h"
 #include "tagtree.h"
+#include "snarty_library.h"
+#include "snarty_favorites.h"
 #include "lang.h"
 #include "logf.h"
 #include "talk.h"
@@ -59,16 +61,21 @@
 #include "plugin.h"
 #include "language.h"
 #include "playlist_catalog.h"
+#include "listening_history.h"
+#ifdef INNIOASIS_Y1
+#include "video-android.h"
+#endif
 
 #define str_or_empty(x) (x ? x : "(NULL)")
 
 #define TAGNAVI_DEFAULT_CONFIG  ROCKBOX_DIR "/tagnavi.config"
 #define TAGNAVI_USER_CONFIG     ROCKBOX_DIR "/tagnavi_user.config"
 
-static int tagtree_play_folder(struct tree_context* c);
+static int tagtree_play_folder(struct tree_context* c, bool shuffle_all);
 
 /* reuse of tagtree data after tagtree_play_folder() */
 static uint32_t loaded_entries_crc = 0;
+void tagtree_invalidate(void){loaded_entries_crc=0;}
 
 
 /* this needs to be same size as struct entry (tree.h) and name needs to be
@@ -92,6 +99,14 @@ enum table {
     TABLE_ALLSUBENTRIES,
     TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS,
     TABLE_PLAYTRACK,
+    TABLE_MOST_LISTENED,
+    TABLE_SHUFFLE_ALBUM,
+    TABLE_RECENT_ADDED,
+    TABLE_SORT_ALPHA,
+    TABLE_SORT_ARTIST,
+    TABLE_FAV_SORT_SONG,
+    TABLE_FAV_SORT_ALBUM,
+    TABLE_FAV_SORT_ARTIST,
 };
 
 static const struct id3_to_search_mapping {
@@ -120,6 +135,11 @@ enum variables {
     menu_load,
     menu_reload,
     menu_shuffle_songs,
+    menu_playlist_catalog,
+    menu_now_playing,
+    menu_listening_wrapped,
+    menu_videos,
+    menu_podcasts,
 };
 
 /* Capacity 10 000 entries (for example 10k different artists) */
@@ -175,6 +195,40 @@ struct display_format {
 };
 
 static struct display_format *formats[TAGMENU_MAX_FMTS];
+static bool recent_added_sort,sort_by_artist,favorites_view;
+static int favorite_sort;
+static bool sort_secondary;
+static unsigned char library_sort[3]; /* Songs, Albums, Artists: alpha/recent/artist */
+static int active_library_sort;
+static bool sorts_loaded;
+static int sort_slot(const char *name)
+{return !strcmp(name,"Songs")?0:!strcmp(name,"Albums")?1:!strcmp(name,"Artists")?2:-1;}
+static void load_sorts(void)
+{
+    if(sorts_loaded)return;
+    sorts_loaded=true;
+    unsigned char data[4];int fd=open(ROCKBOX_DIR "/snarty-sorts-v1.bin",O_RDONLY);
+    if(fd>=0){if(read(fd,data,4)==4&&data[0]==1){for(int i=0;i<3;i++)library_sort[i]=data[i+1]<=2?data[i+1]:0;}close(fd);}
+}
+static void save_sorts(void)
+{
+    unsigned char data[4]={1,library_sort[0],library_sort[1],library_sort[2]};
+    const char *temp=ROCKBOX_DIR "/snarty-sorts-v1.tmp";
+    int fd=open(temp,O_WRONLY|O_CREAT|O_TRUNC,0666);
+    if(fd>=0){bool ok=write(fd,data,4)==4;close(fd);if(ok)rename(temp,ROCKBOX_DIR "/snarty-sorts-v1.bin");}
+}
+
+static struct display_format recent_song_format = {
+    .name="recent_song", .formatstr="%010d %s", .tags={tag_virt_ytmadded,tag_title},
+    .tag_count=2, .strip=11, .limit=1000000,
+};
+static struct display_format recent_album_format = {
+    .name="recent_album", .formatstr="%010d %s", .tags={tag_virt_ytmadded,tag_album},
+    .tag_count=2, .strip=11, .limit=1000000,
+};
+static struct display_format recent_artist_format = {
+    .name="recent_artist",.formatstr="%010d %s",.tags={tag_virt_ytmadded,tag_virt_canonicalartist},.tag_count=2,.strip=11,.limit=1000000,
+};
 static int format_count;
 
 #define MENUENTRY_MAX_NAME 64
@@ -211,7 +265,14 @@ static struct search_instruction *csi;
 static const char *strp;
 static int menu_count;
 static int rootmenu;
+static bool library_route;
+static bool select_first_content;
 
+static struct mp3entry selected_anchor;
+static char anchor_album[TAG_MAXLEN],anchor_artist[TAG_MAXLEN];
+static bool selected_anchor_pending;
+static unsigned selected_browse_depth;
+bool tagtree_selected_browse_active(void){return selected_browse_depth>0;}
 static int current_offset;
 static int current_entry_count;
 
@@ -221,6 +282,25 @@ static int max_history_level; /* depth of menu levels with applicable history */
 static int selected_item_history[MAX_DIR_LEVELS];
 static int table_history[MAX_DIR_LEVELS];
 static int extra_history[MAX_DIR_LEVELS];
+
+/* A playing-track shortcut must not replace the normal browser's history.
+ * Store menu/item indices instead of buflib pointers, which may relocate. */
+static struct {
+    bool recent_added_sort;
+    int active_sort;
+    bool favorites;
+    bool valid;
+    bool library_route;
+    int dirlevel, selected_item, currtable, currextra;
+    int menu_index, instruction_menu, instruction_item;
+    int max_history_level;
+    int selected_history[MAX_DIR_LEVELS];
+    int table_history[MAX_DIR_LEVELS];
+    int extra_history[MAX_DIR_LEVELS];
+    int tree_history[MAX_DIR_LEVELS];
+    int result_seek[MAX_TAGS];
+    char title[MAX_TAGS][128];
+} saved_navigation;
 
 /* a few memory alloc helper */
 static int tagtree_handle;
@@ -390,6 +470,7 @@ static int get_tag(int *tag)
         TAG_MATCH("composer", tag_composer) \
         TAG_MATCH("ensemble", tag_albumartist) \
         TAG_MATCH("grouping", tag_grouping) \
+        TAG_MATCH("ytmadded", tag_virt_ytmadded) \
         TAG_MATCH("entryage", tag_virt_entryage) \
         TAG_MATCH("commitid", tag_commitid) \
         TAG_MATCH("%include", var_include) \
@@ -403,6 +484,12 @@ static int get_tag(int *tag)
         TAG_MATCH("%menu_start", var_menu_start) \
         TAG_MATCH("%byfirstletter", menu_byfirstletter) \
         TAG_MATCH("canonicalartist", tag_virt_canonicalartist) \
+        TAG_MATCH("artistplays", tag_virt_artistplays) \
+        TAG_MATCH("playlist_catalog", menu_playlist_catalog) \
+        TAG_MATCH("now_playing", menu_now_playing) \
+        TAG_MATCH("listening_wrapped", menu_listening_wrapped) \
+        TAG_MATCH("videos", menu_videos) \
+        TAG_MATCH("podcasts", menu_podcasts) \
     /* END OF TAG_TABLE MACRO */
 
     /* build two separate arrays tag strings and symbol map*/
@@ -913,6 +1000,7 @@ static int compare(const void *p1, const void *p2)
 {
     struct tagentry *e1 = (struct tagentry *)p1;
     struct tagentry *e2 = (struct tagentry *)p2;
+    if(sort_secondary){int artist=qsort_fn(e1->album_name?e1->album_name:"",e2->album_name?e2->album_name:"",MAX_PATH);if(artist)return artist;}
     return qsort_fn(e1->name, e2->name, MAX_PATH);
 }
 
@@ -1065,6 +1153,7 @@ static void tagtree_track_finish_event(unsigned short id, void *ev_data)
         tagcache_update_numeric(tagcache_idx, tag_playcount, playcount);
         tagcache_update_numeric(tagcache_idx, tag_playtime, playtime);
         tagcache_update_numeric(tagcache_idx, tag_lastplayed, lastplayed);
+        listening_history_record(id3);
     }
 
     if (autoresume)
@@ -1412,6 +1501,9 @@ static void tagtree_unload(struct tree_context *c)
     for (int i = 0; i < menu_count; i++)
         menus[i] = NULL;
     menu_count = 0;
+    library_route = false;
+    select_first_content = false;
+    saved_navigation.valid = false;
 
     for (int i = 0; i < format_count; i++)
         formats[i] = NULL;
@@ -1699,6 +1791,14 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
         fmt = formats[i];
     }
 
+    bool recent_list=level==0 && sort_slot(current_title[0])>=0;
+    sort_by_artist=recent_list&&tag==tag_album&&active_library_sort==2;
+    bool favorite_list=favorites_view&&level==0&&!strcmp(current_title[0],"Favorites");
+    sort_secondary=sort_by_artist||(favorite_list&&favorite_sort>0);
+    if (recent_added_sort && recent_list)
+    {
+        fmt=tag==tag_album?&recent_album_format:tag==tag_title?&recent_song_format:&recent_artist_format;
+    }
     if (fmt)
     {
         sort_inverse = fmt->sort_inverse;
@@ -1713,6 +1813,7 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
         strip = 0;
     }
 
+    if(sort_secondary||favorite_list){sort=true;sort_limit=1000000;}
     /* lock buflib out due to possible yields */
     tree_lock_cache(c);
     struct tagentry *dptr = core_get_data(c->cache.entries_handle);
@@ -1757,8 +1858,70 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
             total_count++;
     }
 
+    bool library_top = level == 0 &&
+        (!strcmp(current_title[0], "Songs") || !strcmp(current_title[0], "Artists"));
+    bool album_tracks = tag == tag_title &&
+        ((level > 0 && csi->tagorder[level - 1] == tag_album) ||
+         (level == 0 && !strcmp(current_title[0], "Current Album")));
+    if (library_top || album_tracks)
+    {
+        if (offset <= total_count)
+        {
+            dptr->name = library_top ? "[Most Listened to]" : "[Shuffle]";
+            dptr->newtable = library_top ? TABLE_MOST_LISTENED : TABLE_SHUFFLE_ALBUM;
+            dptr->extraseek = 0;
+            dptr->customaction = ONPLAY_NO_CUSTOMACTION;
+            dptr->album_name = NULL;
+            dptr++;
+            current_entry_count++;
+            c->special_entry_count++;
+        }
+        total_count++;
+    }
+
+    if (recent_list)
+    {
+        if (offset<=total_count)
+        {
+            dptr->name=recent_added_sort?"[Recently Added: On]":"[Recently Added]";
+            dptr->newtable=TABLE_RECENT_ADDED;dptr->extraseek=0;
+            dptr->customaction=ONPLAY_NO_CUSTOMACTION;dptr->album_name=NULL;
+            dptr++;current_entry_count++;c->special_entry_count++;
+        }
+        total_count++;
+    }
+    if(recent_list)
+    {
+        int actions=tag==tag_album?2:1;
+        for(int action=0;action<actions;action++){
+            if(offset<=total_count){dptr->name=action?(sort_by_artist?"[By Artist: On]":"[By Artist]"):(active_library_sort==0?"[Alphabetical: On]":"[Alphabetical]");
+                dptr->newtable=action?TABLE_SORT_ARTIST:TABLE_SORT_ALPHA;dptr->extraseek=0;dptr->customaction=ONPLAY_NO_CUSTOMACTION;dptr->album_name=NULL;dptr++;current_entry_count++;c->special_entry_count++;}
+            total_count++;
+        }
+    }
+    if(favorite_list){
+        const char *labels[]={"[Song]","[Album]","[Artist]"};
+        for(int j=0;j<3;j++){
+            if(offset<=total_count){dptr->name=(char*)labels[j];dptr->newtable=TABLE_FAV_SORT_SONG+j;dptr->extraseek=0;dptr->customaction=ONPLAY_NO_CUSTOMACTION;dptr->album_name=NULL;dptr++;current_entry_count++;c->special_entry_count++;}
+            total_count++;
+        }
+    }
     while (tagcache_get_next(&tcs, tcs_buf, tcs_bufsz))
     {
+        if(favorite_list){
+            char path[MAX_PATH],artist[TAG_MAXLEN],albumartist[TAG_MAXLEN],album[TAG_MAXLEN];
+            path[0]=artist[0]=albumartist[0]=album[0]=0;
+            tagcache_retrieve(&tcs,tcs.idx_id,tag_filename,path,sizeof(path));
+            tagcache_retrieve(&tcs,tcs.idx_id,tag_artist,artist,sizeof(artist));
+            tagcache_retrieve(&tcs,tcs.idx_id,tag_albumartist,albumartist,sizeof(albumartist));
+            tagcache_retrieve(&tcs,tcs.idx_id,tag_album,album,sizeof(album));
+            if(!snarty_favorites_match(path,artist,albumartist,album)){
+                if(action_userabort(TIMEOUT_NOBLOCK)){tagcache_search_finish(&tcs);tree_unlock_cache(c);core_unpin(tagtree_handle);return current_entry_count;}
+                continue;
+            }
+        }
+        /* Hide the synthetic untagged category, but retain playable untitled songs. */
+        if(strcmp(tcs.result,UNTAGGED)==0 && (tag==tag_album||tag==tag_artist||tag==tag_virt_canonicalartist))continue;
         if (total_count++ < offset)
             continue;
 
@@ -1772,9 +1935,10 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
             dptr->extraseek = tcs.result_seek;
         dptr->customaction = ONPLAY_NO_CUSTOMACTION;
 
-        fmt = NULL;
-        /* Check the format */
-        for (i = 0; i < format_count; i++)
+        fmt = recent_added_sort && recent_list ?
+            (tag==tag_album?&recent_album_format:tag==tag_title?&recent_song_format:&recent_artist_format) : NULL;
+        /* Explicit account ranks also apply when this level has no configured format. */
+        for (i = 0; !fmt && i < format_count; i++)
         {
             if (c->currtable == TABLE_ALLSUBENTRIES_SORTED_BY_ALBUMS)
             {
@@ -1893,6 +2057,20 @@ static int retrieve_entries(struct tree_context *c, int offset, bool init)
             dptr->album_name = NULL;
         }
 entry_skip_formatter:
+        if(sort_secondary){
+            struct tagcache_search lookup;char file[MAX_PATH],artist[TAG_MAXLEN]={0};
+            if(tagcache_search(&lookup,tag_filename)){
+                if(sort_by_artist){
+                    tagcache_search_add_filter(&lookup,tag_album,dptr->extraseek);
+                    if(tagcache_get_next(&lookup,file,sizeof(file)))tagcache_retrieve(&lookup,lookup.idx_id,tag_virt_canonicalartist,artist,sizeof(artist));
+                }else tagcache_retrieve(&lookup,tcs.idx_id,favorite_sort==1?tag_album:tag_virt_canonicalartist,artist,sizeof(artist));
+                tagcache_search_finish(&lookup);
+            }
+            size_t length=strlen(artist)+1;
+            if(length>(size_t)(c->cache.name_buffer_size-namebufused)){c->dirfull=true;sort=false;break;}
+            dptr->album_name=core_get_data(c->cache.name_buffer_handle)+namebufused;
+            memcpy(dptr->album_name,artist,length);namebufused+=length;
+        }
         dptr++;
         current_entry_count++;
 
@@ -1968,7 +2146,7 @@ entry_skip_formatter:
 
     if (strip)
     {
-        dptr = get_entries(c);
+        dptr = get_entries(c) + c->special_entry_count;
         for (i = c->special_entry_count; i < current_entry_count; i++, dptr++)
         {
             int len = strlen(dptr->name);
@@ -2045,11 +2223,183 @@ static int load_root(struct tree_context *c)
     return i;
 }
 
+static char pending_root_entry[MENUENTRY_MAX_NAME];
+static bool pending_root_reset;
+
+static void save_navigation(const struct tree_context *c)
+{
+    saved_navigation.valid = true;
+    saved_navigation.library_route = library_route;
+    saved_navigation.recent_added_sort = recent_added_sort;
+    saved_navigation.active_sort=active_library_sort;
+    saved_navigation.favorites=favorites_view;
+    saved_navigation.dirlevel = c->dirlevel;
+    saved_navigation.selected_item = c->selected_item;
+    saved_navigation.currtable = c->currtable;
+    saved_navigation.currextra = c->currextra;
+    saved_navigation.max_history_level = max_history_level;
+    saved_navigation.menu_index = -1;
+    saved_navigation.instruction_menu = -1;
+    saved_navigation.instruction_item = -1;
+    for (int i = 0; i < menu_count; i++)
+    {
+        if (menu == menus[i])
+            saved_navigation.menu_index = i;
+        for (int j = 0; j < menus[i]->itemcount; j++)
+        {
+            if (csi == &menus[i]->items[j]->si)
+            {
+                saved_navigation.instruction_menu = i;
+                saved_navigation.instruction_item = j;
+                memcpy(saved_navigation.result_seek, csi->result_seek,
+                       sizeof(saved_navigation.result_seek));
+            }
+        }
+    }
+    memcpy(saved_navigation.selected_history, selected_item_history,
+           sizeof(selected_item_history));
+    memcpy(saved_navigation.table_history, table_history, sizeof(table_history));
+    memcpy(saved_navigation.extra_history, extra_history, sizeof(extra_history));
+    memcpy(saved_navigation.tree_history, c->selected_item_history,
+           sizeof(c->selected_item_history));
+    memcpy(saved_navigation.title, current_title, sizeof(current_title));
+}
+
+bool tagtree_restore_navigation(struct tree_context *c)
+{
+    if (!saved_navigation.valid)
+        return false;
+    saved_navigation.valid = false;
+    library_route = saved_navigation.library_route;
+    recent_added_sort=saved_navigation.recent_added_sort;
+    active_library_sort=saved_navigation.active_sort;
+    favorites_view=saved_navigation.favorites;
+    select_first_content = false;
+    c->dirlevel = saved_navigation.dirlevel;
+    c->selected_item = saved_navigation.selected_item;
+    c->currtable = saved_navigation.currtable;
+    c->currextra = saved_navigation.currextra;
+    max_history_level = saved_navigation.max_history_level;
+    menu = saved_navigation.menu_index >= 0 ? menus[saved_navigation.menu_index] : NULL;
+    csi = NULL;
+    if (saved_navigation.instruction_menu >= 0)
+    {
+        csi = &menus[saved_navigation.instruction_menu]->items[
+            saved_navigation.instruction_item]->si;
+        memcpy(csi->result_seek, saved_navigation.result_seek,
+               sizeof(saved_navigation.result_seek));
+    }
+    memcpy(selected_item_history, saved_navigation.selected_history,
+           sizeof(selected_item_history));
+    memcpy(table_history, saved_navigation.table_history, sizeof(table_history));
+    memcpy(extra_history, saved_navigation.extra_history, sizeof(extra_history));
+    memcpy(c->selected_item_history, saved_navigation.tree_history,
+           sizeof(c->selected_item_history));
+    memcpy(current_title, saved_navigation.title, sizeof(current_title));
+    c->dirfull = false;
+    current_offset = current_entry_count = 0;
+    loaded_entries_crc = 0; /* The shared entry cache contains the shortcut. */
+    return true;
+}
+
+int tagtree_browse_track(const struct mp3entry *track,bool artist)
+{
+    static struct tree_context trees[2];
+    static typeof(saved_navigation) navigation[2];
+    static struct {int level,clause;char text[SEARCHSTR_SIZE];} clauses[2][64];
+    static int counts[2];
+    if(!tagcache_is_usable()||!tagtree_ready()){splash(HZ*2,"Music database is not ready");return GO_TO_PREVIOUS;}
+    if(selected_browse_depth>=2){splash(HZ*2,"Close this song browser first");return GO_TO_PREVIOUS;}
+    unsigned slot=selected_browse_depth;struct tree_context *c=tree_get_context();
+    trees[slot]=*c;navigation[slot]=saved_navigation;counts[slot]=0;
+    if(csi)for(int i=0;i<MAX_TAGS;i++)for(int j=0;j<csi->clause_count[i]&&counts[slot]<64;j++){
+        if(csi->clause[i][j]->str&&csi->clause[i][j]->source!=source_constant){
+            int at=counts[slot]++;clauses[slot][at].level=i;clauses[slot][at].clause=j;strlcpy(clauses[slot][at].text,csi->clause[i][j]->str,SEARCHSTR_SIZE);
+        }
+    }
+    save_navigation(c);
+    memset(&selected_anchor,0,sizeof(selected_anchor));
+    strlcpy(selected_anchor.path,track->path,sizeof(selected_anchor.path));
+    strlcpy(anchor_album,track->album?track->album:"",sizeof(anchor_album));
+    strlcpy(anchor_artist,track->artist?track->artist:"",sizeof(anchor_artist));
+    selected_anchor.album=anchor_album;selected_anchor.artist=anchor_artist;
+    tagtree_select_root_entry(artist?"Current Artist":"Current Album");selected_anchor_pending=true;
+    int filter=SHOW_ID3DB;
+    struct browse_context browse={.dirfilter=filter,.flags=BROWSE_DIRFILTER,.root=""};
+    selected_browse_depth++;push_current_activity(ACTIVITY_DATABASEBROWSER);
+    int result=rockbox_browse(&browse);pop_current_activity_without_refresh();selected_browse_depth--;
+    *c=trees[slot];tagtree_restore_navigation(c);
+    if(csi)for(int i=0;i<counts[slot];i++)strlcpy(csi->clause[clauses[slot][i].level][clauses[slot][i].clause]->str,clauses[slot][i].text,SEARCHSTR_SIZE);
+    saved_navigation=navigation[slot];loaded_entries_crc=0;
+    return result;
+}
+void tagtree_select_root_entry(const char *name)
+{
+    /* NULL requests the actual database menu, rather than a saved subview. */
+    load_sorts();
+    if(!name || (strcmp(name,"Current Album") && strcmp(name,"Current Artist"))){
+        int slot=name?sort_slot(name):-1;active_library_sort=slot>=0?library_sort[slot]:0;
+        recent_added_sort=active_library_sort==1;
+    }
+    if(!name || (strcmp(name,"Current Album")&&strcmp(name,"Current Artist")))favorites_view=name&&!strcmp(name,"Favorites");
+    pending_root_entry[0] = '\0';
+    if (name)
+        strmemccpy(pending_root_entry, favorites_view&&!strcmp(name,"Favorites")?"Songs":name, sizeof(pending_root_entry));
+    pending_root_reset = true;
+}
+
+bool tagtree_is_route_root(const struct tree_context *c)
+{
+    return library_route && c->dirlevel == 1;
+}
+
 int tagtree_load(struct tree_context* c)
 {
     logf( "%s", __func__);
 
     int count;
+    if (pending_root_reset)
+    {
+        bool shortcut = !strcmp(pending_root_entry, "Current Album") ||
+                        !strcmp(pending_root_entry, "Current Artist");
+        if (shortcut && !saved_navigation.valid)
+        {
+            save_navigation(c);recent_added_sort=false;
+        }
+        else if (!shortcut)
+            saved_navigation.valid = false;
+        library_route = pending_root_entry[0] != '\0';
+        max_history_level = 0;
+        loaded_entries_crc = 0;
+        c->dirlevel = 0;
+        c->currtable = TABLE_ROOT;
+        c->selected_item = 0;
+        c->filesindir = load_root(c);
+        /* Internal shortcuts live outside the visible Database menu. */
+        bool found = false;
+        for (int pass = 0; pending_root_entry[0] && pass < menu_count && !found; pass++)
+        {
+            int index = pass == 0 ? rootmenu : (pass <= rootmenu ? pass - 1 : pass);
+            for (int i = 0; i < menus[index]->itemcount; i++)
+            {
+                if (!strcmp(P2STR(menus[index]->items[i]->name), pending_root_entry))
+                {
+                    c->currextra = index;
+                    c->dirlevel = 1; /* Keep load_root from substituting rootmenu. */
+                    c->filesindir = load_root(c);
+                    c->dirlevel = 0;
+                    c->selected_item = i;
+                    tagtree_enter(c, false);
+                    if(favorites_view&&!strcmp(pending_root_entry,"Songs"))strlcpy(current_title[0],"Favorites",sizeof(current_title[0]));
+                    found = true;
+                    break;
+                }
+            }
+        }
+        selected_anchor_pending=false;
+        pending_root_entry[0] = '\0';
+        pending_root_reset = false;
+    }
     int table = c->currtable;
 
     c->dirsindir = 0;
@@ -2115,6 +2465,25 @@ int tagtree_load(struct tree_context* c)
     /* The _total_ numer of entries available. */
     c->dirlength = c->filesindir = count;
 
+    if (select_first_content)
+    {
+        select_first_content = false;
+        if (c->currtable != TABLE_ROOT)
+        {
+            int first = c->special_entry_count;
+            while (first < count)
+            {
+                unsigned char *name = (unsigned char *)tagtree_get_entry(c, first)->name;
+                if (strcmp(P2STR(name), str(LANG_TAGNAVI_UNTAGGED)))
+                    break;
+                first++;
+            }
+            /* Empty/untagged-only lists keep their available actions usable. */
+            if (first < count)
+                c->selected_item = first;
+        }
+    }
+
     return count;
 }
 
@@ -2127,6 +2496,51 @@ int tagtree_load(struct tree_context* c)
  * true, make sure that you are back at the previous dirlevel, by
  * calling tagtree_exit as needed, with is_visible set to false.
  */
+static bool show_video_file(char *name, int attr, struct tree_context *context)
+{
+    (void)context;
+    if (attr & ATTR_DIRECTORY)
+        return true;
+    const char *extension = strrchr(name, '.');
+#ifdef INNIOASIS_Y1
+    if (extension && !strcasecmp(extension, ".mp4"))
+        return true;
+#endif
+    return extension && (!strcasecmp(extension, ".mpg") ||
+                         !strcasecmp(extension, ".mpeg") ||
+                         !strcasecmp(extension, ".mpv") ||
+                         !strcasecmp(extension, ".m2v"));
+}
+
+int tagtree_browse_media_folder(bool videos)
+{
+#ifdef INNIOASIS_Y1
+    if (!android_media_storage_ready())
+    {
+        splash(HZ * 3, "Card unavailable. Turn off USB storage sharing or insert the card.");
+        return 0;
+    }
+    const char *root = videos ? "/sdcard/Videos" : "/sdcard/Podcasts";
+#else
+    const char *root = videos ? "/Videos" : "/Podcasts";
+#endif
+    if (!dir_exists(root) && mkdir(root) < 0)
+    {
+        splash(HZ * 2, "Could not create media folder");
+        return 0;
+    }
+    struct browse_context browse = {
+        .dirfilter = videos ? SHOW_SUPPORTED : SHOW_MUSIC,
+        .flags = BROWSE_DIRFILTER | BROWSE_ROOT_BOUND,
+        .callback_show_item = videos ? show_video_file : NULL,
+        .title = videos ? "Videos" : "Podcasts",
+        .icon = Icon_Folder,
+        .root = root,
+    };
+    int result = rockbox_browse(&browse);
+    return result == GO_TO_WPS || result == GO_TO_ROOT ? result : 0;
+}
+
 int tagtree_enter(struct tree_context* c, bool is_visible)
 {
     logf( "%s", __func__);
@@ -2154,6 +2568,43 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
         seek = dptr->extraseek;
     }
     newextra = dptr->newtable;
+    if (c->currtable == TABLE_ROOT && newextra == TABLE_NAVIBROWSE)
+    {
+        int action = menu->items[seek]->si.tagorder[0];
+        if (action == menu_now_playing)
+            return GO_TO_WPS;
+        if (action == menu_playlist_catalog)
+            return catalog_view_playlists() ? GO_TO_WPS : 0;
+        if (action == menu_videos || action == menu_podcasts)
+            return tagtree_browse_media_folder(action == menu_videos);
+        if (action == menu_listening_wrapped)
+        {
+            listening_history_show();
+            return 0;
+        }
+    }
+    if (newextra == TABLE_MOST_LISTENED)
+    {
+        tagtree_select_root_entry("Most Listened to");
+        return 0;
+    }
+    if(newextra>=TABLE_FAV_SORT_SONG&&newextra<=TABLE_FAV_SORT_ARTIST){favorite_sort=newextra-TABLE_FAV_SORT_SONG;loaded_entries_crc=0;select_first_content=true;c->selected_item=0;return 0;}
+    if(newextra==TABLE_RECENT_ADDED||newextra==TABLE_SORT_ALPHA||newextra==TABLE_SORT_ARTIST)
+    {
+        active_library_sort=newextra==TABLE_RECENT_ADDED?1:newextra==TABLE_SORT_ARTIST?2:0;
+        recent_added_sort=active_library_sort==1;
+        int slot=sort_slot(current_title[0]);if(slot>=0){library_sort[slot]=active_library_sort;save_sorts();}
+        loaded_entries_crc=0;select_first_content=true;c->selected_item=0;return 0;
+    }
+    if (newextra == TABLE_SHUFFLE_ALBUM)
+    {
+        if (global_settings.party_mode && audio_status())
+            return 0;
+        if (!warn_on_pl_erase())
+            return 0;
+        int result = tagtree_play_folder(c, true);
+        return result >= 0 ? GO_TO_WPS : 0;
+    }
 
     if (c->dirlevel >= MAX_DIR_LEVELS)
         return 0;
@@ -2237,7 +2688,7 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
                         searchstring=csi->clause[i][j]->str;
                         *searchstring = '\0';
 
-                        id3 = audio_current_track();
+                        id3 = selected_anchor_pending?&selected_anchor:audio_current_track();
 
                         if (source == source_current_path && id3)
                         {
@@ -2296,7 +2747,7 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
                  allow user to cancel the operation */
                 if (!warn_on_pl_erase())
                     break;
-                if (tagtree_play_folder(c) >= 0)
+                if (tagtree_play_folder(c, false) >= 0)
                     rc = 2;
                 break;
             }
@@ -2326,6 +2777,8 @@ int tagtree_enter(struct tree_context* c, bool is_visible)
             c->selected_item = selected_item_history[c->dirlevel];
         else
             c->selected_item = 0;
+        /* The special-row count is known only after the next list loads. */
+        select_first_content = c->selected_item == 0;
     }
 
     tree_unlock_cache(c);
@@ -2364,8 +2817,10 @@ void tagtree_exit(struct tree_context* c, bool is_visible)
 int tagtree_get_filename(struct tree_context* c, char *buf, int buflen)
 {
     struct tagcache_search tcs;
-    int extraseek = tagtree_get_entry(c, c->selected_item)->extraseek;
-
+    struct tagentry *entry = tagtree_get_entry(c, c->selected_item);
+    if (entry->newtable == TABLE_MOST_LISTENED || entry->newtable == TABLE_SHUFFLE_ALBUM || entry->newtable == TABLE_RECENT_ADDED || entry->newtable == TABLE_SORT_ALPHA || entry->newtable == TABLE_SORT_ARTIST || (entry->newtable>=TABLE_FAV_SORT_SONG&&entry->newtable<=TABLE_FAV_SORT_ARTIST))
+        return -1;
+    int extraseek = entry->extraseek;
 
     if (!tagcache_search(&tcs, tag_filename))
         return -1;
@@ -2385,7 +2840,19 @@ int tagtree_get_custom_action(struct tree_context* c)
 {
     if (c->dirlength == 0)
         return 0;
-    return tagtree_get_entry(c, c->selected_item)->customaction;
+    struct tagentry *entry = tagtree_get_entry(c, c->selected_item);
+    /* Action rows are not files: suppress file/playlist context operations. */
+    if (c->currtable == TABLE_ROOT && entry->newtable == TABLE_NAVIBROWSE)
+    {
+        int action = menu->items[entry->extraseek]->si.tagorder[0];
+        if (action == menu_playlist_catalog || action == menu_now_playing ||
+            action == menu_listening_wrapped || action == menu_videos ||
+            action == menu_podcasts)
+            return -1;
+    }
+    if (entry->newtable == TABLE_MOST_LISTENED || entry->newtable == TABLE_SHUFFLE_ALBUM || entry->newtable == TABLE_RECENT_ADDED || entry->newtable == TABLE_SORT_ALPHA || entry->newtable == TABLE_SORT_ARTIST || (entry->newtable>=TABLE_FAV_SORT_SONG&&entry->newtable<=TABLE_FAV_SORT_ARTIST))
+        return -1;
+    return entry->customaction;
 }
 
 static void swap_array_bool(bool *a, bool *b)
@@ -2546,6 +3013,8 @@ static bool insert_all_playlist(struct tree_context *c,
             }
         }
 
+        if (tagtree_get_entry(c, i)->newtable != TABLE_PLAYTRACK)
+            continue;
         if (!tagcache_retrieve(&tcs, tagtree_get_entry(c, i)->extraseek, tcs.type, buf, sizeof buf))
             continue;
 
@@ -2740,10 +3209,10 @@ int tagtree_add_to_playlist(const char* playlist, bool new_playlist)
     return tagtree_insert_selection(0, false, playlist, new_playlist) ? 0 : -1;
 }
 
-static int tagtree_play_folder(struct tree_context* c)
+static int tagtree_play_folder(struct tree_context* c, bool shuffle_all)
 {
     logf( "%s", __func__);
-    int start_index = c->selected_item;
+    int start_index = MAX(0, c->selected_item - c->special_entry_count);
 
     if (playlist_create(NULL, NULL) < 0)
     {
@@ -2765,7 +3234,13 @@ static int tagtree_play_folder(struct tree_context* c)
         start_index = percentage_start_index * playlist_get_current()->amount / 100;
     }
 
-    if (global_settings.playlist_shuffle)
+    if (shuffle_all)
+    {
+        if (playlist_shuffle_all(current_tick) < 0)
+            return -3;
+        start_index = 0;
+    }
+    else if (global_settings.playlist_shuffle)
     {
         start_index = playlist_shuffle(0, start_index);
         if (!global_settings.play_selected)
@@ -2877,4 +3352,66 @@ int tagtree_get_icon(struct tree_context* c)
         icon = Icon_Audio;
 
     return icon;
+}
+
+/* Read-only card metadata lookup; it never pushes/pops navigation history. */
+int tagtree_card_kind(const struct tree_context *c)
+{
+    if(!csi||c->currtable!=TABLE_NAVIBROWSE||c->currextra>=csi->tagorder_count)return 0;
+    int tag=csi->tagorder[c->currextra];
+    return tag==tag_album?1:(tag==tag_artist||tag==tag_virt_canonicalartist)?2:tag==tag_title?3:0;
+}
+bool tagtree_is_album_view(const struct tree_context *c)
+{
+    return csi && c->currtable==TABLE_NAVIBROWSE && c->currextra<csi->tagorder_count &&
+           csi->tagorder[c->currextra]==tag_album;
+}
+bool tagtree_is_album_tracks(const struct tree_context *c)
+{
+    return csi && c->currtable==TABLE_NAVIBROWSE && csi->tagorder[c->currextra]==tag_title &&
+        ((c->currextra>0 && csi->tagorder[c->currextra-1]==tag_album) ||
+         (c->currextra==0 && !strcmp(current_title[0],"Current Album")));
+}
+bool tagtree_album_info(struct tree_context *c,int item,struct snarty_album_info *info)
+{
+    if(item<c->special_entry_count || item>=c->filesindir)return false;
+    bool tracks=tagtree_is_album_tracks(c);
+    int kind=tagtree_card_kind(c);
+    if(!kind&&!tracks)return false;
+    memset(info,0,sizeof(*info));info->kind=kind;
+    struct tagentry *entry=tagtree_get_entry(c,item);int seek=entry->extraseek;
+    core_pin(tagtree_handle);tree_lock_cache(c);
+    if(kind==1||kind==2)strmemccpy(info->title,P2STR((unsigned char*)entry->name),sizeof(info->title));
+    tree_unlock_cache(c);
+    struct tagcache_search search;bool found=false;
+    struct tagcache_search_clause numeric[MAX_TAGS];int numeric_count=0;
+    if(tagcache_search(&search,tag_filename))
+    {
+        if(kind==1||kind==2)
+        {
+            for(int i=0;i<c->currextra;i++)
+            {
+                int tag=csi->tagorder[i];
+                if(TAGCACHE_IS_NUMERIC(tag))
+                {
+                    numeric[numeric_count]=(struct tagcache_search_clause){.tag=tag,.type=clause_is,.numeric=true,.numeric_data=csi->result_seek[i]};
+                    tagcache_search_add_clause(&search,&numeric[numeric_count++]);
+                }
+                else tagcache_search_add_filter(&search,tag,csi->result_seek[i]);
+            }
+            tagcache_search_add_filter(&search,csi->tagorder[c->currextra],seek);
+            found=tagcache_get_next(&search,info->path,sizeof(info->path));seek=search.idx_id;
+        }
+        else found=tagcache_retrieve(&search,seek,tag_filename,info->path,sizeof(info->path));
+        if(found)
+        {
+            if(kind!=1&&kind!=2)tagcache_retrieve(&search,seek,tracks?tag_album:tag_title,info->title,sizeof(info->title));
+            tagcache_retrieve(&search,seek,tag_virt_canonicalartist,info->artist,sizeof(info->artist));
+        }
+        tagcache_search_finish(&search);
+    }
+    core_unpin(tagtree_handle);
+    if(!info->title[0])strlcpy(info->title,"Unknown Album",sizeof(info->title));
+    if(!info->artist[0])strlcpy(info->artist,"Unknown Artist",sizeof(info->artist));
+    return found;
 }

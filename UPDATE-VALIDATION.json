@@ -1,0 +1,74 @@
+{
+  "version": "SNARTY-Y1-16",
+  "status": "signed experimental build; real provider account, Windows and physical Y1 acceptance pending",
+  "architecture": "Y1 Wi-Fi connects to paired computer bridge; account/downloading stays on computer; separate existing Syncer GUI not modified without its repository",
+  "apk": {
+    "name": "SNARTY-Y1-16-wifi-sync.apk",
+    "bytes": 16697756,
+    "sha256": "5d13ce5f96fd39ea24c8c0184e0661bfdc573495fc7d35ccd09b0483f1ef10d1",
+    "target": 310,
+    "display": "480x360",
+    "java_resource_platform": 17,
+    "native_toolchain": "NDKr10e/GCC4.9 retained",
+    "certificate_sha256": "c8a2e9bccf597c2fb6dc66bee293fc13f2fc47ec77bc6b2b0d52c11f51192ab8",
+    "signatures": "API17 v1 and full v1/v2 verified",
+    "zip_alignment": 4,
+    "native_libraries": 43,
+    "paired_plugins": 167
+  },
+  "passed": {
+    "native_build": "Y1 native build with regenerated dependencies; generated Wi-Fi/Sync icon data rebuilt",
+    "package": "Java/resources against API17; exact paired asset/current lyric plugin/ZIP integrity; all167 plugins nonempty",
+    "menu_simulator": {
+      "evidence": "/tmp/snarty-navigation-4b0p9us7",
+      "checks": "Music Sync Library last; Settings Wi-Fi route; themed 320x240 native renderer; return after unsupported simulator route",
+      "limitations": "Wi-Fi label manually visually inspected because bitmap font full-screen OCR misreads it; Sync/Syne alias explicit; no simulator radio"
+    },
+    "network_transfer": {
+      "evidence": "/tmp/snarty-wireless-u9gggucx",
+      "checks": [
+        "Real Java engine <-> Python bridge over HTTP/HMAC",
+        "Byte-identical audio, lyrics, album/artist artwork, complete playlists and binary library ranks",
+        "Incremental updates and duplicate-content staging",
+        "Preserves local edits, including edits retaining size/mtime detected before replacement",
+        "Rejects wrong keys, tampered manifest signature, corrupt content, unsafe/traversal/symlink/case-colliding paths",
+        "Offline cancellation/no failed-download publication; server nonce replay rejection"
+      ]
+    },
+    "android_controller": "Actual SnartyWireless with recording Android service adapters and real HTTP transfer: WPA2/open/password escaping, deferred core startup, pairing import/secret-file removal, auto transfer, reconnect, interval/debounce, auto toggle, lock acquire/release and completion event",
+    "provider_adapter": {
+      "evidence": "/tmp/snarty-youtube-tvy3kcy0",
+      "type": "recording provider, synthetic playable sine MP3/art; actual FFmpeg/mutagen/Pillow/reference binary writer",
+      "checks": [
+        "All-pagination library/playlist arguments and recently-added sort",
+        "Exact recording/artist IDs; real parsed/tagged MP3; title/artist/album/albumartist/track/disc/year/genre/source IDs",
+        "Real decoded 200x200 JPEG covers/portraits; playlist order and independent source ranks",
+        "Validated line timestamps/plain fallback; preserves genuine enhanced word LRC; incremental audio reuse",
+        "Unknown album/year/genre/disc explicitly reported; missing artist fetched once per refresh; invalid recording rejected"
+      ]
+    },
+    "jni": "Actual native wireless JNI bridge ASan/UBSan: exact UTF8/credential bytes, bounds, null service and exception/reference cleanup"
+  },
+  "pending": [
+    "Physical Y1 Wi-Fi chipset/router connections and SDK17 runtime behavior",
+    "Physical boot/idle/video regression under Wi-Fi use",
+    "Live Google authorization/library pagination/download extraction/access/real lyric and portrait responses",
+    "Windows CMD launcher/Python/FFmpeg/firewall and live local-network account-to-Y1 end-to-end",
+    "Integration into the separate RockBlock Syncer GUI",
+    "Word alignment when provider does not supply words: this adapter exports real lines/text and accepts enhanced LRC from Syncer; no forced aligner implemented here"
+  ],
+  "limits": [
+    "Computer must be awake/running bridge on same trusted private LAN",
+    "Authenticated HTTP media is not encrypted; no Google tokens transmitted",
+    "No automatic deletions of removed songs/playlists; differing unmanaged/local edits pause sync",
+    "Per-file atomic publication; staged whole-generation downloads, playlists then index last; interrupted publication may be partial and retryable",
+    "20,000files,8MiB manifest,2GiB/file,240-byte path and device memory/database limits",
+    "Initial database must be initialized; core-thread polling schedules refresh once usable",
+    "Unavailable provider metadata/lyrics/portraits reported; no guaranteed complete coverage"
+  ],
+  "source_sha256": {
+    "SnartyWireless.java": "74261c37fc5ecb8c1d41cc3e342a48d94b77f52ac6eb96c7426bed99920bf839",
+    "WirelessProtocol.java": "b94af3a74f5cd9d3c450247f46cc398045ca1990e48cfea3ae686037fb796e8f",
+    "WirelessSync.java": "1f550410c2619a70d3fec40aa025a1b5bec6bd9bf84fb0507119751a1064e0c0"
+  }
+}

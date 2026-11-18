@@ -96,8 +96,13 @@ static int list_icon_width(enum screen_type screen)
     return get_icon_width(screen) + ICON_PADDING * 2;
 }
 
+#include "snarty_navigation.h"
+
 static void _default_listdraw_fn(struct list_putlineinfo_t *list_info)
 {
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(list_info->display->screen_type==SCREEN_MAIN){snarty_draw_list_item(list_info);return;}
+#endif
     struct screen *display = list_info->display; 
     int x = list_info->x;
     int y = list_info->y;

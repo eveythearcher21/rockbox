@@ -1,0 +1,65 @@
+# SNARTY Y1 Wi-Fi and library sync, revision16
+
+This update adds working control/transfer code to the existing Android4.2/API17 Y1 app. It uses Android's existing Wi-Fi service/driver; it does not flash a radio, replace the OS or install Google services. A physical Y1 connection and a real YouTube Music account have not been tested in this cloud workspace.
+
+## What is included
+
+Settings → **Wi-Fi** has radio on/off, current status, scanning, available network selection, network-name entry for hidden networks, and Syncer pairing. Use a compatible WPA2-Personal home network; blank passwords reconnect saved networks or configure open networks. Enterprise/WEP configuration is not supported by this menu. The standard Rockbox keyboard enters names/passwords; it displays typed text. Android stores saved network credentials; the Syncer never receives them.
+
+Music → **Sync Library**, at the bottom, requests a sync immediately and opens progress/status, Sync Now, automatic-sync toggle, pairing import/manual pairing, and database refresh. Automatic sync defaults on after pairing. It attempts when Wi-Fi connects, waits for mounted storage and native startup, then checks every15minutes after success. Source preparation retries in about1minute; connection/transfer failures retry in about5minutes. One worker runs at a time. A short transfer Wi-Fi lock is released on completion/failure; the radio is not forced on at every boot.
+
+Transfers include playable music, lyrics, album covers, root Artist_Images portraits, playlists and existing `library-v1.bin` ordering. The current playing queue is not replaced. A completion event requests a database update on the native core thread within normal input polling (about5seconds), including during playback. If the database is not yet initialized, initialize it in the existing database settings first. Library changes remain pending while storage/database are unavailable. Reopen an artwork gallery to refresh its cached pictures.
+
+## Important architecture
+
+The Y1 connects to a **paired computer running the bridge**. It does not log directly into Google or independently download from YouTube. The computer must be awake and reachable on the same private LAN, with Internet access for provider refreshes. The existing RockBlock Syncer GUI source was not supplied in this workspace; this release includes a separate functional reference bridge and an integration handoff, not a claim that the other app has been modified.
+
+The bridge can serve a prepared drive-shaped export from the existing Syncer, or use the new optional desktop YouTube adapter. That adapter uses ytmusicapi/yt-dlp/FFmpeg, an unofficial integration whose availability can change. Account login, permissions, download/extraction access and current provider responses require owner testing. Premium/offline access is not a guarantee that a recording can be exported through this adapter. Provider failures leave the last prepared generation intact and are reported on the computer/player.
+
+Google authorization/cookies/OAuth client credentials stay on the computer, outside the exported folder. Never paste them into chat or put them on the player. The pairing key authorizes only access to this prepared music export. A trusted home network is required: the LAN HTTP transport authenticates requests/manifests and hashes files, but **does not encrypt media in transit**. There is no public Internet listener, port-forwarding requirement or APK auto-install feature.
+
+## Windows setup
+
+1. Back up `.rockbox` and retain revision15. Update-install `SNARTY-Y1-16-wifi-sync.apk` over the existing app; do not uninstall, flash a ROM or change wheel mappings. The package/signing certificate are unchanged.
+2. Extract `SNARTY-Y1-16-wireless-bridge.zip` on the computer. Install Python3.11+ with its Windows `py` launcher. Double-click `START-WIFI-SYNC.cmd`. It creates a per-user virtual environment and installs the listed desktop dependencies. This launcher is source code; it was not executed on a Windows machine in the cloud tests.
+3. Enter the computer's private IPv4 from `ipconfig` (for example `192.168.1.25`), then choose an already prepared Syncer export folder **on the computer**, or the YouTube Music account adapter. Allow Python through Windows Firewall on Private networks. Keep the window open.
+4. Account mode also requires FFmpeg on PATH (or its folder in the launcher), a locally authorized ytmusicapi JSON, and matching OAuth client JSON if using OAuth. Use your existing Syncer provider authorization where compatible. For new authorization, follow https://ytmusicapi.readthedocs.io/en/stable/setup/index.html locally. The upstream browser-header method is deprecated; OAuth requires the owner's client credentials. yt-dlp may additionally need an installed supported JavaScript runtime or a desktop-only Netscape cookies file for particular recordings; see https://github.com/yt-dlp/yt-dlp#dependencies. No live provider setup is claimed by the host tests.
+5. The launcher writes `wireless-pairing.json` beside itself. During normal USB storage access, copy it to the player's `.rockbox/snarty/wireless-pairing.json`. Finish transfers, safely eject and return the card to Android. There is no need to type the long key by hand.
+6. On the Y1, open Settings → Wi-Fi → Enable Wi-Fi, Scan Networks, then Available Networks; select your home network and enter its password (or leave blank to reuse saved credentials). Check Connected status.
+7. Open Wi-Fi → Syncer Pairing / Library → Import Syncer Pairing, then Music → Sync Library. The initial unpaired background check also imports a valid pairing file automatically. Successful import moves the key into app-private preferences and removes the card file. Re-import after a computer IP/key change. The radio/service must exist in the installed firmware; an unavailable/disabled driver is reported rather than “unlocked” by a ROM change.
+8. Wait for **Sync complete**, then return to Music and let the database update finish. Check missing-lyrics/portrait/metadata counts. A long first provider refresh may show “preparing source library”; automatic retries continue. Merely enabling Wi-Fi does not authorize a Google account or start a computer bridge.
+
+Manual CLI equivalent from the extracted bridge folder:
+
+```powershell
+py -3 -m pip install -r wireless-requirements.txt
+py -3 wireless_bridge.py --export "C:\MySyncerExport" --state "$env:LOCALAPPDATA\RockBlockWireless" --host 192.168.1.25 --pair-url http://192.168.1.25:8787 --pair-output wireless-pairing.json
+```
+
+For automatic provider preparation add `--youtube-auth "C:\Private\authorization.json"`; OAuth additionally uses `--youtube-oauth-credentials "C:\Private\oauth-client.json"`. Optional `--youtube-cookies` stays desktop-only. Private state must be outside the export. Avoid hosting directly from the player's USB drive: Android cannot mount that drive while Windows exports it.
+
+## Source metadata, lyrics and portraits
+
+The adapter requests all pages of Songs, Albums and Playlists using the library APIs, with explicit Recently Added order for Songs and Albums. Exact recording IDs determine downloads; no title-search substitutes are used. Playlist order and duplicate entries are retained. Album-only and playlist-only songs are also installed; their Songs added-rank remains unknown unless actually present in Songs. The existing reference binary writer publishes independent source ranks. Unknown source ranks retain the native device-first-seen fallback from revision13.
+
+Audio is actually extracted/transcoded by FFmpeg into MP3 and validated with a real MP3 parser. Known title, primary artist, all credited artists, album, album artist, track/disc, year, genre, source recording/album IDs and actual decoded duration are preserved. Missing source fields are explicitly unknown/unset and counted; release dates/genre are not guessed from download times. Album covers are decoded/re-encoded as modest baseline200×200 JPEGs. Existing artist-image/manual replacements in the prepared export are preserved. New artist portraits are fetched by exact source artist ID, named for the native primary artist under `Artist_Images`, and converted to baseline JPEG. Naming/ID ambiguity is reported; it is not silently matched to a similarly named performer.
+
+Lyrics are fetched for the exact downloaded recording. Genuine provider line timestamps become UTF8 LRC after ordering/duration checks; plain lyrics remain plain UTF8 text. A genuine enhanced word-LRC from the Syncer is preserved rather than replaced by line/plain output. This adapter **does not run a forced aligner or invent word timestamps**; synchronized word highlighting is available when that actual enhanced LRC is supplied. Missing lyrics and portraits are reported and retried on later source refreshes. The prepared-export route transfers the Syncer's existing enhanced lyrics/provenance/recommendation sidecars unchanged.
+
+Account access, geographic/recording restrictions and provider availability can prevent downloads. Invalid/unavailable recording IDs stop publishing the new source generation, with an actionable export/setup error where known. Missing optional genre/year/disc/lyrics/portraits do not become fabricated metadata. See `wireless-source-report.json` in the computer export for coverage, and computer-side state for stable paths/source IDs. There is no guarantee that YouTube supplies every lyric or every piece of metadata.
+
+## Transfer safety and limits
+
+Requests are HMAC-SHA256 authenticated with per-request random nonces; the server rejects recent replays. Manifests are also authenticated against the requesting nonce, and every file is size/SHA256 checked. Redirects, public endpoints, account/config/history/favorites/APK paths, path traversal and case/Unicode manifest collisions are refused. Source objects are immutable checksummed copies so later export edits cannot swap in unverified bytes.
+
+All changed files stage before publication; then audio/sidecars/art publish before playlists, and source ordering publishes last. Each file is atomically renamed. This is not an all-library power-loss transaction: a disconnect during publication can leave some verified files installed, and the next sync continues safely. Ownership hashes and content comparisons prevent overwriting local edits or unrecognized differing files. There is **no automatic deletion** of user/removed-library files or old playlists; mirroring deletions needs a later managed-conflict UI. The current engine supports20,000 files,8MiB manifest,2GiB/file and existing240-byte path/native database limits; large libraries may need smaller exports on the Y1's limited Java heap. Memory failures in the worker become a paused status.
+
+Private state/cache consumes computer disk space in addition to the prepared export; keep it outside the export. Source refresh is coalesced/cached for5minutes. The bridge only runs while its process/window is open. The `.cmd` launcher does not register an unattended Windows startup service. The account/bridge flow must be integrated into the actual Syncer before it can appear as part of that app's GUI.
+
+Unchanged computer objects use stat fingerprints and existing immutable objects; unchanged managed device files use stored size/mtime/hash fingerprints, avoiding a full-library reread/rewrite after every connection. Every new download is hashed, and an existing file is rehashed immediately before replacement, so an edit preserving size/mtime is also protected. A checksum failure is never reported as success; check the source/cache and retry. Source/job errors and missing optional fields remain visible rather than being filled with demo data.
+
+## Validation and pending acceptance
+
+The Y1 ARM build and Java/resources compile against API17. The native shared simulator renders the Music/Settings routes; it has no Wi-Fi radio. Host tests run the actual Java transfer engine against the actual Python HTTP bridge, checking exact media/lyrics/art/playlist/rank bytes, incremental updates, local-edit preservation, duplicate content, corrupt content, wrong keys/tampered manifests, path/case protection, offline cancellation and replay rejection. Recording Android adapters run the actual controller for deferred startup, Wi-Fi controls, WPA2 credential quoting, automatic transfer, quick reconnect, interval/debounce, auto toggle, bounded Wi-Fi lock and completion events. The JNI test exercises the real native bridge under ASan/UBSan.
+
+The source adapter is tested with a recording provider and synthetic playable audio/art, real mutagen/Pillow/FFmpeg and actual binary writer: full-pagination arguments, exact IDs, tags, playlists, ranks, line/plain lyrics, timing rejection, enhanced-LRC preservation and incremental download reuse. These are **not** live Google authentication, streaming/download, physical radio, vendor timing or Windows-installer tests. Physical Y1 Wi-Fi/boot/idle/video stability, home-router compatibility, Windows networking/firewall/account setup and end-to-end provider-account sync remain owner acceptance checks.
