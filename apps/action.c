@@ -23,6 +23,7 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "snarty_navigation.h"
 #include "lang.h"
 
 #if !defined(BOOTLOADER)
@@ -1279,7 +1280,9 @@ int get_action(int context, int timeout)
 #endif
 
     action = do_backlight(&action_last, &current, action);
-
+#ifdef HAVE_SNARTY_NAVIGATION
+    if(action==ACTION_STD_MENU)action=ACTION_STD_CANCEL;
+#endif
     return action;
 }
 

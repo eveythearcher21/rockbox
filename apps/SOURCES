@@ -53,6 +53,14 @@ playlist_catalog.c
 playlist_viewer.c
 plugin.c
 root_menu.c
+snarty_navigation.c
+snarty_albums.c
+snarty_library.c
+snarty_added.c
+snarty_favorites.c
+#ifdef HAVE_TAGCACHE
+snarty_radio.c
+#endif
 screens.c
 settings.c
 settings_list.c
@@ -62,6 +70,8 @@ cuesheet.c
 talk.c
 tree.c
 #ifdef HAVE_TAGCACHE
+listening_stats.c
+listening_history.c
 tagtree.c
 #endif
 filetree.c

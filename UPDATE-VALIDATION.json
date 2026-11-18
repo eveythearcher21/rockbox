@@ -1,0 +1,30 @@
+{
+  "build": "SNARTY-Y1-13",
+  "status": "experimental navigation/Favorites test APK",
+  "sha256": "e57b3437544270058f64defd050853702f1736a868c7535eb25955a233576a69",
+  "size": 16677276,
+  "native": "PASS target310480x360, final serial rebuild clean/no new C warnings; updated Y1 top-button release mapping compiled. One earlier overlapping build reported an empty intermediate plugin; both builds completed/stopped before final serial verification/repackage. Final packaged plugin binaries are all nonempty with nonzero headers.",
+  "android_package": "PASS strict API17 Java/resources; existing JDK obsolete/deprecation notices; signatures API17v1 and fullv1/v2, same certificate; zipalign4, unique ZIP entries/integrity,43 native libraries, exact paired skin/font and current lyrics plugin payload.",
+  "rules_and_dates": "PASS actual production modules under ASan/UBSan: explicit song/album/artist rules, future artist matches, independent removal/reactivation, normalized aliases, stable first-seen date despite later edits, descending date fallback, unknown date handling.",
+  "sort_persistence": "PASS actual preference read/write functions under ASan/UBSan: independent categories, atomic disk roundtrip/emulated restart, missing/truncated-file defaults.",
+  "retained_regressions": "PASS complete-queue shuffle permutation regression, bounded root selection and synced library reader/reference writer including corrupt input/UTF8/aliases. Existing font pinning/clip host test passed during this update.",
+  "simulator": {
+    "passed": [
+      "Top Back returns from playback to originating Songs; sorts persist independently",
+      "Favorite star exposes Song/Album/Artist rules; artist Favorites browse opens; five-row card/track views captured"
+    ],
+    "sort_bytes": [
+      1,
+      0,
+      2,
+      0
+    ],
+    "evidence": "/tmp/snarty-navigation-jw65k3am"
+  },
+  "ui_evidence": "Private14-track fixture with7 albums and6 artists; automatic scan then restart/commit before browsing. Actual five-row album/song lists; album detail has five real songs visible with Shuffle reachable above; independent persisted Songs/Albums sort preferences; top Back from WPS; star Favorite submenu and artist rule/Favorites browsing. Marquee frames visually inspected: selected long title advances inside a cleared selection rectangle without accumulated letters. Scrolling all artist/playlist paths was not separately re-tested.",
+  "scope": "Five-row sizing survives theme dirty/reinitialization; selected card title/art larger using real smaller fonts; ordinary lists five rows where feasible; shared native Menu->Back and physical Y1 held top release returns once. Independent sort preferences and album By Artist. Synthetic untagged album/artist categories hidden, untitled song file fallback retained. Favorites matches union of active rules and sorts by Song/Album/Artist.",
+  "date_semantics": "YouTube-ranked entries first. Unranked entries follow by descending preserved device first-index date; legacy file-date bootstrap is approximate and cannot recover unknown historical transfer dates. These ranks do not encode absolute YouTube dates, so mixed sources are not interleaved by an invented common date. Disk date index maximum seek extent about17.6MB.",
+  "physical_y1": "PENDING owner acceptance: physical button mapping/release timing, actual480x360 typography/five rows, fast scrolling, Favorite playback/new artist additions after real sync, read-only/full card behavior, video/standby/wake. No actual Y1, Android emulator or provider account was connected.",
+  "preview_provenance": "Actual320x240 shared-code simulator screenshots enlarged3x, synthetic colored art/library; not device photographs. Cropped/animated marquee frames are real captures.",
+  "rollout": "Update-install matching-certificate org.rockbox without uninstall/ROM/system-keylayout changes; revision12 paired-assets policy retained. All prior12 features bundled. New preference/date/rule stores preserved during future sync."
+}
