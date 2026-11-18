@@ -1,0 +1,41 @@
+{
+  "build": "SNARTY-Y1-11",
+  "status": "experimental playback/library test APK",
+  "sha256": "d1666147707d0549e3e3bceb792103ae6a30bc127df3a6585f28c9a9dbacccdd",
+  "size": 16673180,
+  "native_build": "PASS target310 480x360, NDKr10e/GCC4.9, no new C warnings",
+  "java_resources": "PASS strict Android API17 platform, Java7 bytecode; existing JDK obsolete/deprecation notices only",
+  "signatures_alignment": "PASS API17 v1 and full v1/v2 signatures, same platform certificate as installed recovery/revision10; zipalign4, ZIP integrity and unique entries",
+  "bundled_payload": "PASS all32 theme files match source; current ARM lyrics plugin matches build; complete migration manifest;43 native libraries",
+  "skin_parse": "PASS target-specific 480x360 CheckWPS for WPS and corrected default SBS viewport",
+  "synced_library": "PASS actual C binary reader under ASan/UBSan against reference Python writer: independent ranks, UTF8/space/quote, storage aliases, missing ranks, corrupt/truncated/oversized files; writer rejects path/case/Unicode collisions and boolean ranks",
+  "word_encoder": "PASS explicit start/end/gap enhanced-LRC golden file; rejects missing/invented/out-of-duration timing; real provider/forced aligner is companion work",
+  "migration": "PASS actual PairedAssets Java: original backups, preserved unrelated/pending config, once-only marker, partial-marker recovery, preflight malformed/path/incomplete-manifest rejection",
+  "root_font_shuffle": "PASS production root bounds/sparse-null selection; pinned resolved UI font and mono/alpha clipping; complete queue permutations1..26/all origins/20seeds under ASan/UBSan",
+  "retained_android_tests": "PASS automatic mounted-storage polling/retry/cancel; one-time idle setting; video file policy/timeline; fake decoder worker stalled-open/nonblocking-close and stale-callback suppression",
+  "simulator": {
+    "passed": [
+      "Recently Added Songs starts with synced rank1 Gamma, not file or alphabetical order",
+      "Album cards show real color art, title and artist; synced album rank1 Album B moves above Album A",
+      "Album-Cover-Zoom: 6 distinct actual SDL frames",
+      "Opening an album expands its cover into the playback-sized panel and keeps the song list alongside",
+      "Playing-Sheet-Slide: 5 distinct actual SDL frames",
+      "One click opens the six-item sheet; Back returns to playback; Album shortcut Back also returns to playback",
+      "Synced radio keeps Gamma playing and queues two valid distinct recommendations, skipping the seed, missing file and duplicate",
+      "Lyrics loads enhanced LRC word intervals, changes mint word highlight during actual playback, and Back returns to playback",
+      "Current Playlist opens the recommendation queue and Back returns to playback"
+    ],
+    "highlight_pixel_counts": [
+      97,
+      100,
+      140,
+      176
+    ],
+    "evidence": "/tmp/snarty-navigation-5bbaco_7"
+  },
+  "animation_evidence": "6 distinct actual SDL cover-zoom frames and5 actual sheet-slide frames; full suite uses shared 320x240 iPod6G simulator, synthetic media/ranks/recommendations/word timestamps, not the physical480x360 Y1",
+  "test_input": "Short test events use one xdotool process for down/sleep/up to avoid process-launch delay becoming a held press under build/OCR load. Held Back now also closes Lyrics. Known bitmap OCR substitutions are explicit.",
+  "data_requirements": "Account-library recency and matched service radio require companion sync; word highlighting requires real word timestamps or disclosed forced alignment. Line/plain/missing lyric fallback is implemented; this suite exercised word timing. No live YouTube Music access, account authentication or provider test was performed.",
+  "physical_y1": "PENDING owner acceptance: APK installation, button timing, animation performance, full-size LCD, video decoder, idle/screen-off wake and reboot reliability. No attached Y1 or Android emulator. No proprietary Apple recommendation algorithm implemented.",
+  "rollout": "Update-install matching certificate without uninstall/ROM/keymap changes. First launch installs backed-up paired skin/fonts/lyrics plugin and appends matching theme settings once; see PLAYBACK-FEATURES.md."
+}

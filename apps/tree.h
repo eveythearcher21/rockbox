@@ -43,6 +43,7 @@ struct entry {
 #define BROWSE_RUNFILE          0x0004  /* do ft_open() on the file instead of browsing */
 #define BROWSE_DIRFILTER        0x0080  /* override global_settings.dirfilter with browse_context.dirfilter */
 #define BROWSE_SELECTED         0x0100  /* this bit is set if user selected item */
+#define BROWSE_ROOT_BOUND       0x0200  /* Back at root returns to caller */
 
 
 struct tree_context;

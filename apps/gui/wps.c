@@ -44,6 +44,7 @@
 #include "misc.h"
 #include "sound.h"
 #include "onplay.h"
+#include "snarty_navigation.h"
 #include "abrepeat.h"
 #include "playback.h"
 #include "splash.h"
@@ -724,6 +725,7 @@ long gui_wps_show(void)
 #endif
     long button = 0;
     bool restore = true;
+
     bool exit = false;
     bool bookmark = false;
     bool update = false;
@@ -807,6 +809,9 @@ long gui_wps_show(void)
         if (button == ACTION_TOUCHSCREEN)
             button = skintouch_to_wps();
 #endif
+#ifdef HAVE_SNARTY_NAVIGATION
+        if(button==ACTION_WPS_BROWSE)button=ACTION_WPS_CONTEXT;
+#endif
         button = do_party_mode(button); /* block select actions in party mode */
 
         button = action_wpsab_single(button); /* iPods/X5/M5 */
@@ -841,6 +846,9 @@ long gui_wps_show(void)
 #endif /* def HAVE_HOTKEY */
             case ACTION_WPS_CONTEXT:
             {
+#ifdef HAVE_SNARTY_NAVIGATION
+                snarty_capture_playing_screen();
+#endif
                 gwps_leave_wps(true);
                 int retval = onplay(state->id3->path,
                        FILE_ATTR_AUDIO, CONTEXT_WPS, hotkey, ONPLAY_NO_CUSTOMACTION);
@@ -848,8 +856,14 @@ long gui_wps_show(void)
                 if (retval == ONPLAY_MAINMENU
                     || !audio_status())
                     return GO_TO_ROOT;
+#ifdef HAVE_TAGCACHE
+                else if (retval == ONPLAY_DATABASE)
+                    return GO_TO_DBBROWSER;
+#endif
                 else if (retval == ONPLAY_REVEAL_FILE)
                     return GO_TO_FILEBROWSER;
+                else if (retval == ONPLAY_SYSTEM)
+                    return GO_TO_SYSTEM_SCREEN;
                 else if (retval == ONPLAY_PLAYLIST)
                     return GO_TO_PLAYLIST_VIEWER;
                 else if (retval == ONPLAY_PLUGIN)
